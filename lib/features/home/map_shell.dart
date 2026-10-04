@@ -45,6 +45,8 @@ class _MapShellState extends ConsumerState<MapShell>
       _syncTracking();
     });
     _syncTracking();
+    // One-shot hydrate of saved trip ids; failures stay in-memory only.
+    unawaited(loadSavedTripIds(ref));
   }
 
   @override

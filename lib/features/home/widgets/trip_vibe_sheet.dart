@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
 import 'package:tripmesh/features/home/widgets/map_fabs.dart';
 import 'package:tripmesh/features/trips/providers/trip_providers.dart';
@@ -64,6 +65,8 @@ class TripVibeSheet extends ConsumerWidget {
         ? 0
         : DateTime.now().difference(anchor).inSeconds.clamp(0, 1 << 31);
     final stale = ageSec > 90;
+    final savedIds = ref.watch(savedTripIdsProvider);
+    final isSaved = resolved != null && savedIds.contains(resolved.id);
 
     return DraggableScrollableSheet(
       controller: controller,
@@ -121,21 +124,35 @@ class TripVibeSheet extends ConsumerWidget {
                       onPressed: _navigate,
                       child: const Text('Navigate'),
                     ),
-                    // TODO(P1): wire Share to a real share target.
                     TextButton(
                       style: TextButton.styleFrom(
                         minimumSize: const Size(48, 48),
                       ),
-                      onPressed: () {},
+                      onPressed: resolved == null
+                          ? null
+                          : () async {
+                              try {
+                                await Share.share(shareTextFor(resolved));
+                              } catch (_) {
+                                // No share target: stay on the map, never crash.
+                              }
+                            },
                       child: const Text('Share'),
                     ),
-                    // TODO(P1): wire Save to a real saved-trips store.
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(48, 48),
+                    Semantics(
+                      button: true,
+                      label: isSaved ? 'Unsave trip' : 'Save trip',
+                      child: TextButton(
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(48, 48),
+                        ),
+                        onPressed: resolved == null
+                            ? null
+                            : () async {
+                                await toggleSavedTrip(ref, resolved.id);
+                              },
+                        child: Text(isSaved ? 'Saved ✓' : 'Save'),
                       ),
-                      onPressed: () {},
-                      child: const Text('Save'),
                     ),
                   ],
                 ),

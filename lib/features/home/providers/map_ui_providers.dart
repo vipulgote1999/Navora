@@ -1,5 +1,7 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tripmesh/features/home/places/place_poi.dart';
 import 'package:tripmesh/shared/models/trip.dart';
 
@@ -43,6 +45,48 @@ final nearbyPoisProvider =
 const defaultMapCenterLat = 18.6545;
 const defaultMapCenterLng = 73.9412;
 const defaultMapZoom = 14.0;
+
+/// Prefs key for the locally saved trip ids (string list).
+const savedTripIdsKey = 'tripmesh_saved_ids';
+
+/// Ids of trips the user saved. Hydrated once from prefs in
+/// [MapShell.initState]; failures fall back to in-memory only, never throw.
+final savedTripIdsProvider = StateProvider<Set<String>>((ref) => <String>{});
+
+/// Exact system-share text for [trip].
+String shareTextFor(Trip trip) =>
+    'Join my TripMesh trip "${trip.name}" with code ${trip.joinCode}:\n'
+    'navora://join/${trip.joinCode}';
+
+/// Loads saved ids from prefs into [savedTripIdsProvider]. Silent on failure.
+Future<void> loadSavedTripIds(WidgetRef ref) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final ids = prefs.getStringList(savedTripIdsKey);
+    if (ids != null) {
+      ref.read(savedTripIdsProvider.notifier).state = ids.toSet();
+    }
+  } catch (_) {
+    // Offline/corrupt prefs: stay in-memory only, never throw.
+  }
+}
+
+/// Toggles [id] in [savedTripIdsProvider] and persists. Silent on failure.
+Future<void> toggleSavedTrip(WidgetRef ref, String id) async {
+  final current = Set<String>.from(ref.read(savedTripIdsProvider));
+  if (current.contains(id)) {
+    current.remove(id);
+  } else {
+    current.add(id);
+  }
+  ref.read(savedTripIdsProvider.notifier).state = current;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(savedTripIdsKey, current.toList());
+  } catch (_) {
+    // Persist failed: in-memory state still updated, never throw.
+  }
+}
 
 /// Active trip id: explicit selection wins, else the most-recent trip.
 /// `trips` arrive in insertion order (oldest first), so "last" is newest.
