@@ -1,7 +1,8 @@
 import 'dart:math';
 
 /// Join-code format shared by mocks, Firestore rules docs, and QR links.
-/// Example: `TRIP-7K2Q`. Matches [Trip.joinCodePattern].
+/// Example: `TRIP-7K2Q`. Canonical pattern — [Trip] re-exports this single
+/// source via `Trip.joinCodePattern` / `Trip.isValidJoinCode`.
 final RegExp joinCodePattern = RegExp(r'^TRIP-[A-Z0-9]{4}$');
 
 /// Code prefix shown to users and encoded in deep links (`navora://join/<code>`).

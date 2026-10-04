@@ -32,6 +32,19 @@ void main() {
       expect(host.vehicleType, 'Car');
     });
 
+    test('demo-uid create throws', () async {
+      final ds = await _repo();
+      expect(
+        () => ds.createTrip(
+          name: 'Demo Ride',
+          origin: 'A',
+          destination: 'B',
+          hostUid: 'demo-123',
+        ),
+        throwsStateError,
+      );
+    });
+
     test('forced collision retries with a new code', () async {
       final ds = await _repo();
       // Seed a reservation that the first generated code will collide with.

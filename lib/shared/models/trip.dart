@@ -1,11 +1,15 @@
+import '../../core/utils/join_code.dart' as join_code;
+
 /// Trip status lifecycle: planning -> active -> completed.
 enum TripStatus { planning, active, completed }
 
 /// Core trip entity. Plain Dart — no Firebase imports.
 class Trip {
-  static final RegExp joinCodePattern = RegExp(r'^TRIP-[A-Z0-9]{4}$');
+  /// Canonical join-code pattern, single-sourced from `join_code.dart`.
+  static RegExp get joinCodePattern => join_code.joinCodePattern;
 
-  static bool isValidJoinCode(String code) => joinCodePattern.hasMatch(code);
+  static bool isValidJoinCode(String code) =>
+      join_code.joinCodePattern.hasMatch(code);
 
   final String id;
   final String name;

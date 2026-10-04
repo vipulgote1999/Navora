@@ -22,7 +22,7 @@ service cloud.firestore {
     // Join-code reservations: claimed before the trip write (transaction
     // parity with MockTripDataSource, which retries 3x on collision).
     match /joinCodes/{code} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && !isDemoUid();
       allow write: if isSignedIn() && !isDemoUid();
     }
 
