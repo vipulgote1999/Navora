@@ -2,6 +2,38 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Helpers shared by trip rules below.
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Demo/simulator UIDs are local-only and denied on all real trips.
+    function isDemoUid() {
+      return isSignedIn() && request.auth.uid.matches('demo-.*');
+    }
+
+    // Trips: any signed-in non-demo user may read/create; the mock
+    // MockTripDataSource enforces the same demo-* denial in-process.
+    match /trips/{tripId} {
+      allow read, create: if isSignedIn() && !isDemoUid();
+      allow update, delete: if false;
+    }
+
+    // Join-code reservations: claimed before the trip write (transaction
+    // parity with MockTripDataSource, which retries 3x on collision).
+    match /joinCodes/{code} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && !isDemoUid();
+    }
+
+    // Members: self-join only in the emulator/mock phase; demo-* denied.
+    match /trips/{tripId}/members/{uid} {
+      allow read: if isSignedIn() && !isDemoUid();
+      allow create: if isSignedIn() && !isDemoUid()
+        && request.auth.uid == uid;
+      allow update, delete: if false;
+    }
+
     // Live convoy positions: only the authenticated owner may write
     // their own document (doc id == auth uid).
     match /live/{docId} {
