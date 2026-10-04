@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tripmesh/features/home/places/geocode_repository.dart';
 import 'package:tripmesh/features/home/places/place_poi.dart';
 import 'package:tripmesh/shared/models/trip.dart';
 
@@ -40,6 +41,18 @@ final myHeadingDegProvider = StateProvider<double?>((ref) => null);
 /// nothing fetched yet or the fetch failed.
 final nearbyPoisProvider =
     StateProvider<List<PlacePoi>>((ref) => const []);
+
+/// Live Nominatim suggestions for the search field. Written debounced by
+/// [MapsSearchBar]; cleared on select or empty query.
+final searchResultsProvider =
+    StateProvider<List<PlaceSearchResult>>((ref) => const []);
+
+/// In-flight search flag for the suggestion dropdown spinner.
+final searchingProvider = StateProvider<bool>((ref) => false);
+
+/// Accepted search result. [ConvoyMap] flies to it and pins it.
+final searchFocusProvider =
+    StateProvider<PlaceSearchResult?>((ref) => null);
 
 /// Default map center (Wagholi, Pune) — shared fallback for map + sheet.
 const defaultMapCenterLat = 18.6545;

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' hide Path;
+import 'package:tripmesh/features/home/places/geocode_repository.dart';
 import 'package:tripmesh/features/home/places/place_poi.dart';
 import 'package:tripmesh/features/home/places/places_repository.dart';
 import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
@@ -256,6 +257,16 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
   @override
   Widget build(BuildContext context) {
     ref.listen<FollowMode>(mapFollowModeProvider, (_, next) => _follow(next));
+    ref.listen<PlaceSearchResult?>(searchFocusProvider, (_, next) {
+      if (next == null) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        try {
+          _mapController.move(LatLng(next.lat, next.lng), 15);
+        } catch (_) {
+          // Controller not attached yet: stay put.
+        }
+      });
+    });
 
     final tripsAsync = ref.watch(watchTripsProvider);
     final selectedId = ref.watch(selectedTripIdProvider);
@@ -285,6 +296,7 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
     final accuracyM = ref.watch(myAccuracyMProvider);
     final headingDeg = ref.watch(myHeadingDegProvider);
     final pois = ref.watch(nearbyPoisProvider);
+    final searchFocus = ref.watch(searchFocusProvider);
 
     void select() =>
         ref.read(selectedTripIdProvider.notifier).state = activeId;
@@ -415,6 +427,45 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
                       SnackBar(content: Text('${poi.name} · ${poi.kind}')),
                     );
                   },
+                ),
+              ),
+            if (searchFocus != null)
+              Marker(
+                point: LatLng(searchFocus.lat, searchFocus.lng),
+                width: 120,
+                height: 60,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Semantics(
+                      label: 'Search result ${searchFocus.title}',
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          searchFocus.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onPrimary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const Icon(
+                      Icons.place,
+                      color: Colors.red,
+                      size: 28,
+                    ),
+                  ],
                 ),
               ),
           ],

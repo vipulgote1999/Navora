@@ -103,6 +103,7 @@ class _MapShellState extends ConsumerState<MapShell>
                     ),
                   ),
                   const SizedBox(height: 8),
+                  const _SearchResultsDropdown(),
                   const AssistChips(),
                   if (navIndex == 1) const Expanded(child: YouTripsOverlay()),
                   if (navIndex == 2) const Expanded(child: ContributeOverlay()),
@@ -121,6 +122,74 @@ class _MapShellState extends ConsumerState<MapShell>
               child: TripVibeSheet(controller: _sheetController),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Nominatim suggestion dropdown under the search bar.
+///
+/// Shows while [searchResultsProvider] is non-empty (or a spinner while
+/// [searchingProvider]); hidden otherwise. Tapping a result pins it via
+/// [searchFocusProvider] (ConvoyMap flies there), clears the list and
+/// dismisses the keyboard. Trip filtering via [searchQueryProvider] is
+/// untouched — suggestions and trip results coexist.
+class _SearchResultsDropdown extends ConsumerWidget {
+  const _SearchResultsDropdown();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final results = ref.watch(searchResultsProvider);
+    final searching = ref.watch(searchingProvider);
+    if (results.isEmpty && !searching) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Material(
+        elevation: 4,
+        borderRadius: BorderRadius.circular(16),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 240),
+          child: searching && results.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                )
+              : ListView.builder(
+                  padding: EdgeInsets.zero,
+                  shrinkWrap: true,
+                  itemCount: results.length,
+                  itemBuilder: (context, i) {
+                    final r = results[i];
+                    return ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.place_outlined),
+                      title: Text(
+                        r.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        r.subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      onTap: () {
+                        ref.read(searchFocusProvider.notifier).state = r;
+                        ref.read(searchResultsProvider.notifier).state =
+                            const [];
+                        ref.read(searchingProvider.notifier).state = false;
+                        FocusScope.of(context).unfocus();
+                      },
+                    );
+                  },
+                ),
         ),
       ),
     );

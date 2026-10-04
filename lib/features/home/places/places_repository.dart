@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'geocode_repository.dart';
 import 'place_poi.dart';
 
 /// Keyless POI fetch over the public Overpass API (OpenStreetMap data).
@@ -12,7 +13,9 @@ import 'place_poi.dart';
 /// tiles-only instead of erroring.
 class PlacesRepository {
   static const overpassUrl = 'https://overpass-api.de/api/interpreter';
+  static const nominatimUrl = 'https://nominatim.openstreetmap.org/search';
   static const fetchTimeout = Duration(seconds: 10);
+  static const searchTimeout = Duration(seconds: 8);
 
   /// Fetches up to 60 named POIs around ([lat], [lng]).
   ///
@@ -57,6 +60,46 @@ out 60;
       final json = jsonDecode(res.body);
       if (json is! Map<String, dynamic>) return const [];
       return parsePois(json);
+    } catch (_) {
+      return const [];
+    } finally {
+      if (owned) httpClient.close();
+    }
+  }
+
+  /// Geocodes [query] via Nominatim, viewport-biased to ([lat], [lng]).
+  ///
+  /// Returns at most 5 results; every failure returns `[]`.
+  /// [client] is injectable for tests.
+  Future<List<PlaceSearchResult>> searchPlaces({
+    required String query,
+    double? lat,
+    double? lng,
+    http.Client? client,
+  }) async {
+    final q = query.trim();
+    if (q.length < 3) return const [];
+    final params = <String, String>{
+      'q': q,
+      'format': 'jsonv2',
+      'limit': '5',
+      'accept-language': 'en',
+    };
+    if (lat != null && lng != null) {
+      params['viewbox'] = '${lng - 0.3},${lat + 0.3},${lng + 0.3},${lat - 0.3}';
+      params['bounded'] = '0';
+    }
+    final owned = client == null;
+    final httpClient = client ?? http.Client();
+    try {
+      final res = await httpClient
+          .get(
+            Uri.parse(nominatimUrl).replace(queryParameters: params),
+            headers: {'User-Agent': 'TripMesh/1.0 (place search)'},
+          )
+          .timeout(searchTimeout);
+      if (res.statusCode != 200) return const [];
+      return parseSearchResults(jsonDecode(res.body));
     } catch (_) {
       return const [];
     } finally {

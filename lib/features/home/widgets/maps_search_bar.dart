@@ -1,19 +1,66 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tripmesh/features/auth/providers/auth_providers.dart';
+import 'package:tripmesh/features/home/places/places_repository.dart';
 import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
 
-/// Floating maps-home search bar (mock-only, no map SDK).
+/// Floating maps-home search bar.
 ///
 /// Leading 48dp menu button ([onMenuTap]), expanding `Search here`
-/// field writing [searchQueryProvider], trailing mic stub + avatar.
-class MapsSearchBar extends ConsumerWidget {
+/// field, trailing mic stub + avatar. Typing filters local trips via
+/// [searchQueryProvider] AND fetches keyless Nominatim suggestions
+/// (debounced 600ms, min 3 chars, viewport-biased) into
+/// [searchResultsProvider]; [searchingProvider] drives the dropdown
+/// spinner. Selecting a result is the dropdown's job (see MapShell).
+class MapsSearchBar extends ConsumerStatefulWidget {
   const MapsSearchBar({super.key, required this.onMenuTap});
 
   final VoidCallback onMenuTap;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MapsSearchBar> createState() => _MapsSearchBarState();
+}
+
+class _MapsSearchBarState extends ConsumerState<MapsSearchBar> {
+  final _places = PlacesRepository();
+  Timer? _debounce;
+  int _token = 0;
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _onChanged(String v) {
+    ref.read(searchQueryProvider.notifier).state = v;
+    ref.read(searchFocusProvider.notifier).state = null;
+    _debounce?.cancel();
+    final q = v.trim();
+    if (q.length < 3) {
+      ref.read(searchResultsProvider.notifier).state = const [];
+      ref.read(searchingProvider.notifier).state = false;
+      return;
+    }
+    ref.read(searchingProvider.notifier).state = true;
+    final myToken = ++_token;
+    _debounce = Timer(const Duration(milliseconds: 600), () async {
+      final center = ref.read(myPositionProvider);
+      final results = await _places.searchPlaces(
+        query: q,
+        lat: center?.latitude ?? defaultMapCenterLat,
+        lng: center?.longitude ?? defaultMapCenterLng,
+      );
+      if (!mounted || myToken != _token) return; // Stale: a newer keystroke won.
+      ref.read(searchResultsProvider.notifier).state = results;
+      ref.read(searchingProvider.notifier).state = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider).value;
     final initial =
         (user?.displayName?.trim().isNotEmpty ?? false
@@ -40,7 +87,7 @@ class MapsSearchBar extends ConsumerWidget {
                   minWidth: 48,
                   minHeight: 48,
                 ),
-                onPressed: onMenuTap,
+                onPressed: widget.onMenuTap,
               ),
             ),
             Expanded(
@@ -50,8 +97,7 @@ class MapsSearchBar extends ConsumerWidget {
                   hintText: 'Search here',
                   border: InputBorder.none,
                 ),
-                onChanged: (v) =>
-                    ref.read(searchQueryProvider.notifier).state = v,
+                onChanged: _onChanged,
               ),
             ),
             Semantics(
