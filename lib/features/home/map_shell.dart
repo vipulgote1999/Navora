@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tripmesh/features/auth/providers/auth_providers.dart';
 import 'package:tripmesh/features/home/home_screen.dart';
 import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
+import 'package:tripmesh/features/home/tracking/tracking_controller.dart';
 import 'package:tripmesh/features/home/widgets/assist_chips.dart';
 import 'package:tripmesh/features/home/widgets/convoy_map.dart';
 import 'package:tripmesh/features/home/widgets/map_fabs.dart';
@@ -28,17 +31,52 @@ class MapShell extends ConsumerStatefulWidget {
   ConsumerState<MapShell> createState() => _MapShellState();
 }
 
-class _MapShellState extends ConsumerState<MapShell> {
+class _MapShellState extends ConsumerState<MapShell>
+    with WidgetsBindingObserver {
   late final DraggableScrollableController _sheetController;
+  final _tracker = TrackingController();
+  ProviderSubscription<int>? _navSub;
 
   @override
   void initState() {
     super.initState();
     _sheetController = DraggableScrollableController();
+    WidgetsBinding.instance.addObserver(this);
+    _navSub = ref.listenManual<int>(navIndexProvider, (prev, next) {
+      _syncTracking();
+    });
+    _syncTracking();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _syncTracking();
+  }
+
+  /// Tracks only on Explore (index 0) while resumed; otherwise the stream
+  /// halts (battery). A denied/revoked permission stops cleanly with the
+  /// existing SnackBar, never a crash.
+  Future<void> _syncTracking() async {
+    final resumed = WidgetsBinding.instance.lifecycleState == null ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    final onExplore = ref.read(navIndexProvider) == 0;
+    if (!onExplore || !resumed) {
+      await _tracker.stop();
+      return;
+    }
+    final ok = await _tracker.start(ref);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Location off — showing trip area')),
+      );
+    }
   }
 
   @override
   void dispose() {
+    _navSub?.close();
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_tracker.stop());
     _sheetController.dispose();
     super.dispose();
   }
