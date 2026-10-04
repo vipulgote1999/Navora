@@ -77,8 +77,9 @@ class _MemberPin extends StatelessWidget {
 /// inline `Failed to load map tiles — check connection` retry widget —
 /// tapping it bumps a local [ValueKey] to refetch, markers keep rendering.
 /// Consumes [mapFollowModeProvider] (write path: [MapFabs]) via a
-/// [MapController]: follow-me/convoy recenters on the convoy area (mock
-/// positions cluster at [convoyMapCenter]; real GPS targeting lands P0-02).
+/// [MapController]: follow-me moves to the real GPS fix in
+/// [myPositionProvider]; convoy (and me-before-first-fix) centers the trip
+/// area at [convoyMapCenter]. A blue dot marks the real fix when known.
 class ConvoyMap extends ConsumerStatefulWidget {
   const ConvoyMap({super.key});
 
@@ -101,11 +102,19 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
   void _follow(FollowMode mode) {
     if (mode == FollowMode.none) return;
     // Post-frame: the controller may not be attached yet on first listen.
-    // TODO(P0-02): target real GPS (me) / live bounds (convoy) once
-    // watchLive yields positions; mock pins cluster at convoyMapCenter.
+    // FollowMode.me targets the real GPS fix; without one yet (or for
+    // convoy) fall back to the trip area. Never jump to a stale default
+    // as if it were the user's position.
+    final me = ref.read(myPositionProvider);
+    final target = (mode == FollowMode.me && me != null)
+        ? me
+        : convoyMapCenter;
+    final zoom = (mode == FollowMode.me && me != null)
+        ? defaultMapZoom + 1
+        : defaultMapZoom;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       try {
-        _mapController.move(convoyMapCenter, defaultMapZoom);
+        _mapController.move(target, zoom);
       } catch (_) {
         // Controller not attached yet (e.g. test teardown): stay put.
       }
@@ -144,6 +153,7 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
     final live = liveAsync.value ?? const <LivePosition>[];
     final now = DateTime.now();
     final byUid = <String, LivePosition>{for (final p in live) p.uid: p};
+    final me = ref.watch(myPositionProvider);
 
     void select() =>
         ref.read(selectedTripIdProvider.notifier).state = activeId;
@@ -220,6 +230,24 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
                   now: now,
                   primary: colorScheme.primary,
                   onTap: select,
+                ),
+              ),
+            if (me != null)
+              Marker(
+                point: me,
+                width: 48,
+                height: 48,
+                child: Semantics(
+                  label: 'My location',
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.blue,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 3),
+                    ),
+                    alignment: Alignment.center,
+                    child: const SizedBox.shrink(),
+                  ),
                 ),
               ),
           ],

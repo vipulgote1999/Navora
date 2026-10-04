@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -71,7 +74,29 @@ class MapFabs extends ConsumerWidget {
         }
         return;
       }
-      ref.read(mapFollowModeProvider.notifier).state = FollowMode.me;
+      // Permission granted: read the real GPS fix (bounded — a hung stack
+      // falls through to the SnackBar, never a dead button or stale map).
+      try {
+        final pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+          ),
+        ).timeout(
+          locationTimeout,
+          onTimeout: () => throw TimeoutException('location fix timed out'),
+        );
+        ref.read(myPositionProvider.notifier).state =
+            LatLng(pos.latitude, pos.longitude);
+        ref.read(mapFollowModeProvider.notifier).state = FollowMode.me;
+      } catch (_) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Location off — showing trip area'),
+            ),
+          );
+        }
+      }
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

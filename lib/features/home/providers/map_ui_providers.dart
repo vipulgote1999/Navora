@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/legacy.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:tripmesh/shared/models/trip.dart';
 
 /// Camera follow behavior for the maps-home view.
@@ -17,6 +18,10 @@ final selectedTripIdProvider = StateProvider<String?>((ref) => null);
 final mapFollowModeProvider = StateProvider<FollowMode>(
   (ref) => FollowMode.none,
 );
+
+/// Last known real GPS fix. Null until My Location succeeds once.
+/// Written by [MapFabs], consumed by [ConvoyMap] for follow-me + blue dot.
+final myPositionProvider = StateProvider<LatLng?>((ref) => null);
 
 /// Default map center (Wagholi, Pune) — shared fallback for map + sheet.
 const defaultMapCenterLat = 18.6545;
