@@ -8,10 +8,10 @@ import 'package:tripmesh/features/trips/providers/trip_providers.dart';
 import 'package:tripmesh/shared/models/live_position.dart';
 import 'package:tripmesh/shared/models/trip.dart';
 
-/// OSM light tiles (CARTO dark when the theme is dark).
+/// OSM standard tiles for both themes (keyless). CARTO dark_all now
+/// requires an API key, so dark mode reuses OSM to avoid the watermark.
 const lightTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-const darkTileUrl =
-    'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png';
+const darkTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 /// Shared convoy map center (Wagholi, Pune).
 const convoyMapCenter = LatLng(defaultMapCenterLat, defaultMapCenterLng);
