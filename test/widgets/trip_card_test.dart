@@ -59,9 +59,15 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      // Maps-home shell: Create/Join live in the drawer; the recent list
+      // shows in the vibe sheet (and the drawer once opened).
+      expect(find.text('Weekend Ride'), findsWidgets);
+      tester.state<ScaffoldState>(find.byType(Scaffold)).openDrawer();
+      await tester.pumpAndSettle();
+
       expect(find.text('Create trip'), findsOneWidget);
       expect(find.text('Join trip'), findsOneWidget);
-      expect(find.text('Weekend Ride'), findsOneWidget);
+      expect(find.text('Weekend Ride'), findsWidgets);
     });
   });
 }
