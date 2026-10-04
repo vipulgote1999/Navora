@@ -23,10 +23,11 @@ class AssistChips extends ConsumerWidget {
     final trips = repo is MockTripDataSource
         ? repo.trips.values.toList()
         : const <Trip>[];
+    final resolvedId = activeTripId(trips, selectedId);
     Trip? active;
-    if (selectedId != null) {
+    if (resolvedId != null) {
       for (final t in trips) {
-        if (t.id == selectedId) active = t;
+        if (t.id == resolvedId) active = t;
       }
     }
     active ??= trips.isNotEmpty ? trips.last : null;

@@ -21,12 +21,30 @@ import 'package:tripmesh/shared/widgets/trip_card.dart';
 /// auth-filtered trip list; index 2 (Contribute) overlays Create/Join
 /// quick actions that push the same placeholder routes as [TripDrawer].
 /// No `AppBar` — [MapsSearchBar] floats over the map.
-class MapShell extends ConsumerWidget {
+class MapShell extends ConsumerStatefulWidget {
   const MapShell({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final sheetController = DraggableScrollableController();
+  ConsumerState<MapShell> createState() => _MapShellState();
+}
+
+class _MapShellState extends ConsumerState<MapShell> {
+  late final DraggableScrollableController _sheetController;
+
+  @override
+  void initState() {
+    super.initState();
+    _sheetController = DraggableScrollableController();
+  }
+
+  @override
+  void dispose() {
+    _sheetController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final navIndex = ref.watch(navIndexProvider);
 
     return Scaffold(
@@ -62,7 +80,7 @@ class MapShell extends ConsumerWidget {
             // the top of the Stack and cover the search bar.
             Align(
               alignment: Alignment.bottomCenter,
-              child: TripVibeSheet(controller: sheetController),
+              child: TripVibeSheet(controller: _sheetController),
             ),
           ],
         ),

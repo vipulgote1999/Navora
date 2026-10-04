@@ -13,8 +13,9 @@ final directionsUri = Uri.parse(
 ///
 /// Location sets [mapFollowModeProvider] to [FollowMode.me]; when permission
 /// is denied (or geolocator throws, e.g. offline/test env) a SnackBar
-/// `Location off — showing trip area` is shown instead. Directions opens the
-/// Google Maps link via url_launcher and never throws.
+/// `Location off — showing trip area` is shown instead. Permanently denied
+/// (`deniedForever`) adds a `Settings` action opening app settings.
+/// Directions opens the Google Maps link via url_launcher and never throws.
 class MapFabs extends ConsumerWidget {
   const MapFabs({super.key});
 
@@ -44,8 +45,23 @@ class MapFabs extends ConsumerWidget {
   Future<void> _locate(BuildContext context, WidgetRef ref) async {
     try {
       final permission = await _permission();
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
+      if (permission == LocationPermission.deniedForever) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Location off — showing trip area'),
+              action: SnackBarAction(
+                label: 'Settings',
+                onPressed: () {
+                  Geolocator.openAppSettings();
+                },
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      if (permission == LocationPermission.denied) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(

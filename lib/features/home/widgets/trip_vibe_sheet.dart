@@ -1,38 +1,69 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
+import 'package:tripmesh/features/home/widgets/map_fabs.dart';
 import 'package:tripmesh/features/trips/data/mock_trip_datasource.dart';
 import 'package:tripmesh/features/trips/providers/trip_providers.dart';
+import 'package:tripmesh/shared/models/live_position.dart';
 import 'package:tripmesh/shared/models/trip.dart';
 import 'package:tripmesh/shared/widgets/trip_card.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Bottom sheet for the maps-home view: trip vibe summary + recent trips.
 ///
 /// Sizes mirror the maps-home spec: peek 0.22, collapsed 0.12, expanded 0.75.
 /// Title is `Trip vibe` until a trip is selected ([selectedTripIdProvider]),
-/// then it shows the trip name. The status chip reads `Last updated Xs ago`
-/// (keyed off [Trip.createdAt] as the P0 liveness proxy) and greys out once
-/// the data is older than 90s.
+/// then it shows the trip name. The status chip reads `Last updated Xs ago`.
+/// Age is `max(live updatedAt, else trip createdAt)` — honest only once
+/// watchLive yields fixes (mock yields none; see the TODO below): until
+/// P0-02 wires real GPS, `createdAt` is a liveness proxy, NOT a GPS fix age.
+/// The chip greys out once the data is older than 90s. The trip list is
+/// filtered by [searchQueryProvider] (name/origin/destination contains).
 class TripVibeSheet extends ConsumerWidget {
   final DraggableScrollableController controller;
 
   const TripVibeSheet({super.key, required this.controller});
 
+  Future<void> _navigate() async {
+    try {
+      await launchUrl(directionsUri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      // Offline / no handler: stay on the map, never crash.
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final repo = ref.watch(tripRepositoryProvider);
-    final trips = repo is MockTripDataSource
+    final allTrips = repo is MockTripDataSource
         ? repo.trips.values.toList()
         : const <Trip>[];
+    final query = ref.watch(searchQueryProvider);
+    final trips = filterTripsByQuery(allTrips, query);
     final selectedId = ref.watch(selectedTripIdProvider);
-    final Trip? selected = selectedId == null
+    final activeId = activeTripId(allTrips, selectedId);
+    final Trip? focus = (activeId == null
         ? null
-        : _findTrip(trips, selectedId);
-    final Trip? focus = selected ?? (trips.isEmpty ? null : trips.first);
+        : _findTrip(allTrips, activeId));
+    final Trip? resolved = focus ?? (allTrips.isEmpty ? null : allTrips.last);
 
-    final ageSec = focus == null
+    // TODO(P0-02): createdAt below is NOT a GPS fix age — it only stands in
+    // because mock watchLive yields [] and Member carries no timestamp.
+    // Real liveness = max live updatedAt per member; do not present the
+    // createdAt fallback as GPS age once live fixes exist.
+    final live = resolved == null
+        ? const <LivePosition>[]
+        : (ref.watch(livePositionsProvider(resolved.id)).value ??
+              const <LivePosition>[]);
+    var anchor = resolved?.createdAt;
+    for (final p in live) {
+      if (anchor == null || p.updatedAt.isAfter(anchor)) {
+        anchor = p.updatedAt;
+      }
+    }
+    final ageSec = anchor == null
         ? 0
-        : DateTime.now().difference(focus.createdAt).inSeconds.clamp(0, 1 << 31);
+        : DateTime.now().difference(anchor).inSeconds.clamp(0, 1 << 31);
     final stale = ageSec > 90;
 
     return DraggableScrollableSheet(
@@ -68,7 +99,7 @@ class TripVibeSheet extends ConsumerWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  selected?.name ?? 'Trip vibe',
+                  focus?.name ?? 'Trip vibe',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 4),
@@ -84,14 +115,25 @@ class TripVibeSheet extends ConsumerWidget {
                 Row(
                   children: [
                     TextButton(
-                      onPressed: () {},
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(48, 48),
+                      ),
+                      onPressed: _navigate,
                       child: const Text('Navigate'),
                     ),
+                    // TODO(P1): wire Share to a real share target.
                     TextButton(
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(48, 48),
+                      ),
                       onPressed: () {},
                       child: const Text('Share'),
                     ),
+                    // TODO(P1): wire Save to a real saved-trips store.
                     TextButton(
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(48, 48),
+                      ),
                       onPressed: () {},
                       child: const Text('Save'),
                     ),
