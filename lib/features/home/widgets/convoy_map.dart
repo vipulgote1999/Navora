@@ -1,7 +1,12 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:latlong2/latlong.dart' hide Path;
+import 'package:tripmesh/features/home/places/place_poi.dart';
+import 'package:tripmesh/features/home/places/places_repository.dart';
 import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
 import 'package:tripmesh/features/trips/data/mock_trip_datasource.dart';
 import 'package:tripmesh/features/trips/providers/trip_providers.dart';
@@ -70,7 +75,82 @@ class _MemberPin extends StatelessWidget {
   }
 }
 
-/// OSM convoy map canvas: tile layer + destination H pin + member pins.
+/// Google-Maps-style heading wedge: a soft cone pointing along [headingDeg]
+/// (0 = north). Painted behind the blue dot, hidden while stationary.
+class _HeadingWedge extends StatelessWidget {
+  final double headingDeg;
+
+  const _HeadingWedge({required this.headingDeg});
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.rotate(
+      angle: headingDeg * math.pi / 180,
+      child: CustomPaint(
+        size: const Size(44, 44),
+        painter: _WedgePainter(),
+      ),
+    );
+  }
+}
+
+class _WedgePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.blue.withAlpha(90);
+    final path = Path()
+      ..moveTo(size.width / 2, 2)
+      ..lineTo(size.width / 2 - 9, size.height / 2 + 6)
+      ..lineTo(size.width / 2 + 9, size.height / 2 + 6)
+      ..close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Grey Google-style POI pin: dot on the coordinate, name below.
+class _PoiPin extends StatelessWidget {
+  final PlacePoi poi;
+  final VoidCallback onTap;
+
+  const _PoiPin({required this.poi, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Semantics(
+        label: '${poi.name}, ${poi.kind}',
+        button: true,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: const Color(0xFF757575),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 1.5),
+              ),
+            ),
+            Text(
+              poi.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 10, color: Color(0xFF616161)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+/// OSM convoy map canvas: tiles + destination H pin + member pins +
+/// Google-style my-location dot (accuracy circle, heading wedge) + nearby
+/// OSM place pins (fetched on map idle, zoom-gated, debounced).
 ///
 /// Marker taps write [selectedTripIdProvider]. Tile errors never crash
 /// ([TileLayer.errorTileCallback] is a no-op) and failed tiles render an
@@ -89,14 +169,67 @@ class ConvoyMap extends ConsumerStatefulWidget {
 
 class _ConvoyMapState extends ConsumerState<ConvoyMap> {
   final _mapController = MapController();
+  final _places = PlacesRepository();
+  static const _distance = Distance();
 
   /// Bumped on tile-error retry tap; [ValueKey] on [TileLayer] refetches.
   int _tileRetryKey = 0;
 
+  /// POI fetch gating: debounced, zoom-gated, distance-gated.
+  Timer? _poiDebounce;
+  LatLng? _lastPoiAt;
+  double? _lastPoiZoom;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _schedulePoiFetch());
+  }
+
   @override
   void dispose() {
+    _poiDebounce?.cancel();
     _mapController.dispose();
     super.dispose();
+  }
+
+  void _onMapEvent(MapEvent event) {
+    if (event is MapEventMoveEnd) _schedulePoiFetch();
+  }
+
+  void _schedulePoiFetch() {
+    _poiDebounce?.cancel();
+    _poiDebounce = Timer(const Duration(milliseconds: 700), _fetchPois);
+  }
+
+  /// Refreshes [nearbyPoisProvider] for the current viewport.
+  /// Skipped below z14 or when the camera barely moved. A failed fetch
+  /// yields [] and must not wipe already-shown pins, so empty results
+  /// overwrite state only when nothing is shown yet.
+  Future<void> _fetchPois() async {
+    late final LatLng center;
+    late final double zoom;
+    try {
+      center = _mapController.camera.center;
+      zoom = _mapController.camera.zoom;
+    } catch (_) {
+      return; // Controller not attached yet.
+    }
+    if (zoom < 14) return;
+    final last = _lastPoiAt;
+    if (last != null &&
+        _lastPoiZoom != null &&
+        (zoom - _lastPoiZoom!).abs() < 0.5 &&
+        _distance.as(LengthUnit.Meter, last, center) < 250) {
+      return;
+    }
+    final pois = await _places.fetchNearby(lat: center.latitude, lng: center.longitude);
+    if (!mounted) return;
+    if (pois.isNotEmpty || ref.read(nearbyPoisProvider).isEmpty) {
+      ref.read(nearbyPoisProvider.notifier).state = pois;
+    }
+    _lastPoiAt = center;
+    _lastPoiZoom = zoom;
   }
 
   void _follow(FollowMode mode) {
@@ -154,6 +287,9 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
     final now = DateTime.now();
     final byUid = <String, LivePosition>{for (final p in live) p.uid: p};
     final me = ref.watch(myPositionProvider);
+    final accuracyM = ref.watch(myAccuracyMProvider);
+    final headingDeg = ref.watch(myHeadingDegProvider);
+    final pois = ref.watch(nearbyPoisProvider);
 
     void select() =>
         ref.read(selectedTripIdProvider.notifier).state = activeId;
@@ -162,9 +298,10 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return FlutterMap(
       mapController: _mapController,
-      options: const MapOptions(
+      options: MapOptions(
         initialCenter: convoyMapCenter,
         initialZoom: defaultMapZoom,
+        onMapEvent: _onMapEvent,
       ),
       children: [
         TileLayer(
@@ -189,6 +326,19 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
             );
           },
         ),
+        if (me != null)
+          CircleLayer(
+            circles: [
+              CircleMarker(
+                point: me,
+                radius: (accuracyM ?? 40).clamp(15, 250).toDouble(),
+                useRadiusInMeter: true,
+                color: Colors.blue.withAlpha(36),
+                borderColor: Colors.blue.withAlpha(110),
+                borderStrokeWidth: 1.5,
+              ),
+            ],
+          ),
         MarkerLayer(
           markers: [
             Marker(
@@ -232,11 +382,18 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
                   onTap: select,
                 ),
               ),
-            if (me != null)
+            if (me != null) ...[
+              if (headingDeg != null)
+                Marker(
+                  point: me,
+                  width: 44,
+                  height: 44,
+                  child: _HeadingWedge(headingDeg: headingDeg),
+                ),
               Marker(
                 point: me,
-                width: 24,
-                height: 24,
+                width: 20,
+                height: 20,
                 child: Semantics(
                   label: 'Your current location',
                   child: Container(
@@ -248,6 +405,21 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
                     alignment: Alignment.center,
                     child: const SizedBox.shrink(),
                   ),
+                ),
+              ),
+            ],
+            for (final poi in pois)
+              Marker(
+                point: LatLng(poi.lat, poi.lng),
+                width: 84,
+                height: 36,
+                child: _PoiPin(
+                  poi: poi,
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('${poi.name} · ${poi.kind}')),
+                    );
+                  },
                 ),
               ),
           ],

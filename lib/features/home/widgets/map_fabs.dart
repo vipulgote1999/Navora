@@ -87,6 +87,12 @@ class MapFabs extends ConsumerWidget {
         );
         ref.read(myPositionProvider.notifier).state =
             LatLng(pos.latitude, pos.longitude);
+        ref.read(myAccuracyMProvider.notifier).state =
+            pos.accuracy > 0 ? pos.accuracy : null;
+        // Heading is meaningful only while moving — stationary fixes report
+        // stale/zero bearings, so the wedge hides (Google Maps behaviour).
+        ref.read(myHeadingDegProvider.notifier).state =
+            pos.speed > 1 ? pos.heading : null;
         ref.read(mapFollowModeProvider.notifier).state = FollowMode.me;
       } catch (_) {
         if (context.mounted) {

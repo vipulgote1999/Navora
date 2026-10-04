@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:tripmesh/features/home/places/place_poi.dart';
 import 'package:tripmesh/shared/models/trip.dart';
 
 /// Camera follow behavior for the maps-home view.
@@ -22,6 +23,21 @@ final mapFollowModeProvider = StateProvider<FollowMode>(
 /// Last known real GPS fix. Null until My Location succeeds once.
 /// Written by [MapFabs], consumed by [ConvoyMap] for follow-me + blue dot.
 final myPositionProvider = StateProvider<LatLng?>((ref) => null);
+
+/// GPS accuracy of [myPositionProvider] in meters. Null when unknown.
+/// Sizes the blue-dot accuracy circle (clamped at render).
+final myAccuracyMProvider = StateProvider<double?>((ref) => null);
+
+/// Travel bearing of [myPositionProvider] in degrees (0-360).
+/// Null when unknown or stationary — the heading wedge hides.
+/// Written by [MapFabs], consumed by [ConvoyMap].
+final myHeadingDegProvider = StateProvider<double?>((ref) => null);
+
+/// Nearby OSM places for the current viewport. Refreshed on map idle
+/// (zoom-gated, debounced, distance-gated by [ConvoyMap]); empty when
+/// nothing fetched yet or the fetch failed.
+final nearbyPoisProvider =
+    StateProvider<List<PlacePoi>>((ref) => const []);
 
 /// Default map center (Wagholi, Pune) — shared fallback for map + sheet.
 const defaultMapCenterLat = 18.6545;
