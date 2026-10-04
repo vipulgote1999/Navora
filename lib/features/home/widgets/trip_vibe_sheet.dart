@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
 import 'package:tripmesh/features/home/widgets/map_fabs.dart';
-import 'package:tripmesh/features/trips/data/mock_trip_datasource.dart';
 import 'package:tripmesh/features/trips/providers/trip_providers.dart';
 import 'package:tripmesh/shared/models/live_position.dart';
 import 'package:tripmesh/shared/models/trip.dart';
@@ -34,10 +33,9 @@ class TripVibeSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final repo = ref.watch(tripRepositoryProvider);
-    final allTrips = repo is MockTripDataSource
-        ? repo.trips.values.toList()
-        : const <Trip>[];
+    final tripsAsync = ref.watch(watchTripsProvider);
+    // Loading shows the same empty text as no-trips; error shows retry.
+    final allTrips = tripsAsync.value ?? const <Trip>[];
     final query = ref.watch(searchQueryProvider);
     final trips = filterTripsByQuery(allTrips, query);
     final selectedId = ref.watch(selectedTripIdProvider);
@@ -141,7 +139,23 @@ class TripVibeSheet extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
-                if (trips.isEmpty)
+                if (tripsAsync.hasError)
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text("Couldn't load trips"),
+                      ),
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(48, 48),
+                        ),
+                        onPressed: () =>
+                            ref.invalidate(watchTripsProvider),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  )
+                else if (trips.isEmpty)
                   const Text('No trips yet — create one to get started.')
                 else
                   for (final trip in trips)
@@ -149,9 +163,8 @@ class TripVibeSheet extends ConsumerWidget {
                       padding: const EdgeInsets.only(bottom: 8),
                       child: TripCard(
                         trip: trip,
-                        memberCount: repo is MockTripDataSource
-                            ? repo.membersFor(trip.id).length
-                            : 0,
+                        memberCount:
+                            ref.watch(tripMembersProvider(trip.id)).length,
                       ),
                     ),
               ],

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tripmesh/core/utils/eta_label.dart';
 import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
-import 'package:tripmesh/features/trips/data/mock_trip_datasource.dart';
 import 'package:tripmesh/features/trips/providers/trip_providers.dart';
 import 'package:tripmesh/shared/models/trip.dart';
 
@@ -16,13 +15,31 @@ class AssistChips extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final repo = ref.watch(tripRepositoryProvider);
+    final tripsAsync = ref.watch(watchTripsProvider);
     final selectedId = ref.watch(selectedTripIdProvider);
-    // TODO(P0-02): replace MockTripDataSource downcast with a watchTrips
-    // provider/stream; downcast is a P0-01 stopgap, do not expand its use.
-    final trips = repo is MockTripDataSource
-        ? repo.trips.values.toList()
-        : const <Trip>[];
+    // Loading shows the same empty text as no-trips; error shows retry.
+    if (tripsAsync.hasError) {
+      return SizedBox(
+        height: 56,
+        child: Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text("Couldn't load trips"),
+              const SizedBox(width: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: TextButton(
+                  onPressed: () => ref.invalidate(watchTripsProvider),
+                  child: const Text('Retry'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    final trips = tripsAsync.value ?? const <Trip>[];
     final resolvedId = activeTripId(trips, selectedId);
     Trip? active;
     if (resolvedId != null) {

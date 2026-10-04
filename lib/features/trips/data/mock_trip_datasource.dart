@@ -28,8 +28,30 @@ class MockTripDataSource implements TripRepository {
   final String Function() _joinCodeGenerator;
   int _tripCounter = 0;
 
+  /// Broadcast change notifier: fed by [createTrip]/[joinTrip], consumed by
+  /// [watchAllTrips]. Closed by [dispose].
+  final StreamController<void> _changes = StreamController<void>.broadcast();
+
   MockTripDataSource({String Function()? joinCodeGenerator})
       : _joinCodeGenerator = joinCodeGenerator ?? generateJoinCode;
+
+  void _emit() {
+    if (!_changes.isClosed) _changes.add(null);
+  }
+
+  /// All trips, re-emitted on every create/join. Emits current state first
+  /// so late listeners (e.g. trips created before the widget pumps) resolve.
+  Stream<List<Trip>> watchAllTrips() async* {
+    yield List.unmodifiable(trips.values);
+    await for (final _ in _changes.stream) {
+      yield List.unmodifiable(trips.values);
+    }
+  }
+
+  /// Closes the [watchAllTrips] change controller.
+  void dispose() {
+    _changes.close();
+  }
 
   /// Members of [tripId] in join order. Empty list for unknown trips.
   List<Member> membersFor(String tripId) =>
@@ -75,6 +97,7 @@ class MockTripDataSource implements TripRepository {
           vehicleLabel: '',
         ),
       };
+      _emit();
       return trip;
     }
     throw StateError(
@@ -114,6 +137,7 @@ class MockTripDataSource implements TripRepository {
         vehicleLabel: '',
       ),
     );
+    _emit();
     return trip;
   }
 

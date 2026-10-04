@@ -8,7 +8,6 @@ import 'package:latlong2/latlong.dart' hide Path;
 import 'package:tripmesh/features/home/places/place_poi.dart';
 import 'package:tripmesh/features/home/places/places_repository.dart';
 import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
-import 'package:tripmesh/features/trips/data/mock_trip_datasource.dart';
 import 'package:tripmesh/features/trips/providers/trip_providers.dart';
 import 'package:tripmesh/shared/models/live_position.dart';
 import 'package:tripmesh/shared/models/trip.dart';
@@ -258,13 +257,9 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
   Widget build(BuildContext context) {
     ref.listen<FollowMode>(mapFollowModeProvider, (_, next) => _follow(next));
 
-    final repo = ref.watch(tripRepositoryProvider);
+    final tripsAsync = ref.watch(watchTripsProvider);
     final selectedId = ref.watch(selectedTripIdProvider);
-    // TODO(P0-02): replace MockTripDataSource downcast with a watchTrips
-    // provider/stream; downcast is a P0-01 stopgap, do not expand its use.
-    final trips = repo is MockTripDataSource
-        ? repo.trips.values.toList()
-        : const <Trip>[];
+    final trips = tripsAsync.value ?? const <Trip>[];
     final resolvedId = activeTripId(trips, selectedId);
     Trip? active;
     if (resolvedId != null) {
@@ -274,9 +269,9 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
     }
     active ??= trips.isNotEmpty ? trips.last : null;
     final activeId = active?.id ?? 'mock-trip';
-    final members = active != null && repo is MockTripDataSource
-        ? repo.membersFor(active.id)
-        : const [];
+    final members = active == null
+        ? const []
+        : ref.watch(tripMembersProvider(active.id));
 
     // Live liveness: consumed where available via livePositionsProvider.
     // TODO(P0-02): Member carries no timestamp, so per-member staleness is
@@ -296,7 +291,7 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
 
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return FlutterMap(
+    final map = FlutterMap(
       mapController: _mapController,
       options: MapOptions(
         initialCenter: convoyMapCenter,
@@ -430,6 +425,35 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
           ],
           // Open on load so attribution is visible (and testable) immediately.
           popupInitialDisplayDuration: Duration(seconds: 5),
+        ),
+      ],
+    );
+    if (!tripsAsync.hasError) return map;
+    // Stream error: keep the map, banner the failure with a retry.
+    return Stack(
+      children: [
+        map,
+        Positioned(
+          top: 8,
+          left: 16,
+          right: 16,
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  const Expanded(child: Text("Couldn't load trips")),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(48, 48),
+                    ),
+                    onPressed: () => ref.invalidate(watchTripsProvider),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ],
     );

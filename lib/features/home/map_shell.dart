@@ -13,7 +13,6 @@ import 'package:tripmesh/features/home/widgets/maps_search_bar.dart';
 import 'package:tripmesh/features/home/widgets/trip_drawer.dart';
 import 'package:tripmesh/features/home/widgets/trip_nav_bar.dart';
 import 'package:tripmesh/features/home/widgets/trip_vibe_sheet.dart';
-import 'package:tripmesh/features/trips/data/mock_trip_datasource.dart';
 import 'package:tripmesh/features/trips/providers/trip_providers.dart';
 import 'package:tripmesh/shared/models/trip.dart';
 import 'package:tripmesh/shared/widgets/trip_card.dart';
@@ -135,17 +134,15 @@ class YouTripsOverlay extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authStateProvider).value;
-    final repo = ref.watch(tripRepositoryProvider);
-    final trips = repo is MockTripDataSource
-        ? repo.trips.values.toList()
-        : const <Trip>[];
+    final tripsAsync = ref.watch(watchTripsProvider);
+    final trips = tripsAsync.value ?? const <Trip>[];
     final mine = user == null
         ? const <Trip>[]
         : trips
               .where(
-                (t) =>
-                    repo is MockTripDataSource &&
-                    repo.membersFor(t.id).any((m) => m.uid == user.uid),
+                (t) => ref
+                    .watch(tripMembersProvider(t.id))
+                    .any((m) => m.uid == user.uid),
               )
               .toList();
 
@@ -164,6 +161,22 @@ class YouTripsOverlay extends ConsumerWidget {
               const SizedBox(height: 8),
               if (user == null)
                 const Text('Not signed in (mock mode)')
+              else if (tripsAsync.hasError)
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text("Couldn't load trips"),
+                    ),
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(48, 48),
+                      ),
+                      onPressed: () =>
+                          ref.invalidate(watchTripsProvider),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                )
               else if (mine.isEmpty)
                 const Text('No trips yet — create one to get started.')
               else
@@ -172,9 +185,8 @@ class YouTripsOverlay extends ConsumerWidget {
                     padding: const EdgeInsets.only(bottom: 8),
                     child: TripCard(
                       trip: trip,
-                      memberCount: repo is MockTripDataSource
-                          ? repo.membersFor(trip.id).length
-                          : 0,
+                      memberCount:
+                          ref.watch(tripMembersProvider(trip.id)).length,
                     ),
                   ),
             ],

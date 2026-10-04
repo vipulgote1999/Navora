@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tripmesh/features/auth/providers/auth_providers.dart';
 import 'package:tripmesh/features/home/home_screen.dart';
 import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
-import 'package:tripmesh/features/trips/data/mock_trip_datasource.dart';
 import 'package:tripmesh/features/trips/providers/trip_providers.dart';
 import 'package:tripmesh/shared/models/trip.dart';
 import 'package:tripmesh/shared/widgets/trip_card.dart';
@@ -19,10 +18,9 @@ class TripDrawer extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authStateProvider);
-    final repo = ref.watch(tripRepositoryProvider);
-    final allTrips = repo is MockTripDataSource
-        ? repo.trips.values.toList()
-        : const <Trip>[];
+    final tripsAsync = ref.watch(watchTripsProvider);
+    // Loading shows the same empty text as no-trips; error shows retry.
+    final allTrips = tripsAsync.value ?? const <Trip>[];
     final trips = filterTripsByQuery(allTrips, ref.watch(searchQueryProvider));
     final user = authState.value;
 
@@ -65,7 +63,22 @@ class TripDrawer extends ConsumerWidget {
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 8),
-          if (trips.isEmpty)
+          if (tripsAsync.hasError)
+            Row(
+              children: [
+                const Expanded(
+                  child: Text("Couldn't load trips"),
+                ),
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(48, 48),
+                  ),
+                  onPressed: () => ref.invalidate(watchTripsProvider),
+                  child: const Text('Retry'),
+                ),
+              ],
+            )
+          else if (trips.isEmpty)
             const Text('No trips yet — create one to get started.')
           else
             for (final trip in trips)
@@ -73,9 +86,7 @@ class TripDrawer extends ConsumerWidget {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: TripCard(
                   trip: trip,
-                  memberCount: repo is MockTripDataSource
-                      ? repo.membersFor(trip.id).length
-                      : 0,
+                  memberCount: ref.watch(tripMembersProvider(trip.id)).length,
                 ),
               ),
         ],
