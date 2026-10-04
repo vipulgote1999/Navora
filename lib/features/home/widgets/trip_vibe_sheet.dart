@@ -103,14 +103,15 @@ class TripVibeSheet extends ConsumerWidget {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 4),
-                Chip(
-                  label: Text('Last updated ${ageSec}s ago'),
-                  labelStyle: TextStyle(
-                    color: stale
-                        ? Colors.grey
-                        : Theme.of(context).colorScheme.onSurface,
+                if (resolved != null)
+                  Chip(
+                    label: Text('Last updated ${ageSec}s ago'),
+                    labelStyle: TextStyle(
+                      color: stale
+                          ? Theme.of(context).colorScheme.outline
+                          : Theme.of(context).colorScheme.onSurface,
+                    ),
                   ),
-                ),
                 const SizedBox(height: 8),
                 Row(
                   children: [

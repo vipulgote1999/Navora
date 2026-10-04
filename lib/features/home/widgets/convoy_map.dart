@@ -193,8 +193,8 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
           markers: [
             Marker(
               point: convoyMapCenter,
-              width: 48,
-              height: 48,
+              width: 40,
+              height: 40,
               child: GestureDetector(
                 onTap: select,
                 child: Semantics(
@@ -212,7 +212,7 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        fontSize: 20,
+                        fontSize: 16,
                       ),
                     ),
                   ),
@@ -235,15 +235,15 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
             if (me != null)
               Marker(
                 point: me,
-                width: 48,
-                height: 48,
+                width: 24,
+                height: 24,
                 child: Semantics(
-                  label: 'My location',
+                  label: 'Your current location',
                   child: Container(
                     decoration: BoxDecoration(
                       color: Colors.blue,
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 3),
+                      border: Border.all(color: Colors.white, width: 2),
                     ),
                     alignment: Alignment.center,
                     child: const SizedBox.shrink(),
@@ -255,7 +255,6 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
         const RichAttributionWidget(
           attributions: [
             TextSourceAttribution('OpenStreetMap contributors'),
-            TextSourceAttribution('CARTO'),
           ],
           // Open on load so attribution is visible (and testable) immediately.
           popupInitialDisplayDuration: Duration(seconds: 5),
