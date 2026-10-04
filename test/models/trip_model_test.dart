@@ -30,8 +30,7 @@ void main() {
       expect(restored.createdAt, trip.createdAt);
     });
 
-    test('createdAt defaults to now when omitted', () {
-      final before = DateTime.now();
+    test('createdAt defaults to now when omitted', () {      final before = DateTime.now();
       final trip = Trip(
         id: 'trip-2',
         name: 'No Date Ride',
@@ -46,6 +45,22 @@ void main() {
         trip.createdAt.isAfter(before.subtract(const Duration(seconds: 5))),
         isTrue,
       );
+    });
+
+    test('fromMap accepts Firestore Timestamp for createdAt', () {
+      final when = DateTime.fromMillisecondsSinceEpoch(1759531200000);
+      final map = <String, dynamic>{
+        'id': 'trip-ts',
+        'name': 'TS Ride',
+        'origin': 'A',
+        'destination': 'B',
+        'status': 'planning',
+        'hostUid': 'host-uid-1',
+        'joinCode': 'TRIP-EF56',
+        'maxParticipants': 5,
+        'createdAt': _FakeTimestamp(when),
+      };
+      expect(Trip.fromMap(map).createdAt, when);
     });
 
     test('joinCode matches ^TRIP-[A-Z0-9]{4}\$', () {
@@ -156,4 +171,12 @@ void main() {
       expect(msg.isExpired(sentAt.add(const Duration(hours: 1))), isFalse);
     });
   });
+}
+
+/// Minimal Firestore Timestamp stand-in (duck-typed via toDate()).
+class _FakeTimestamp {
+  final DateTime _date;
+  _FakeTimestamp(this._date);
+  DateTime toDate() => _date;
+  int get millisecondsSinceEpoch => _date.millisecondsSinceEpoch;
 }

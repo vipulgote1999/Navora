@@ -17,6 +17,8 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authStateProvider);
     final repo = ref.watch(tripRepositoryProvider);
+    // TODO(P0-02): replace MockTripDataSource downcast with a watchTrips
+    // provider/stream; downcast is a P0-01 stopgap, do not expand its use.
     final trips = repo is MockTripDataSource
         ? repo.trips.values.toList()
         : const <Trip>[];

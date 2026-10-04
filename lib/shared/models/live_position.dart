@@ -1,5 +1,8 @@
+import '../../core/utils/firestore_date.dart';
+
 /// Latest known live position for one member (`live/{uid}` doc).
 /// Plain Dart — no Firebase imports.
+
 class LivePosition {
   /// Stale threshold: positions older than 90s render greyed.
   static const staleThresholdSeconds = 90;
@@ -53,9 +56,7 @@ class LivePosition {
         speed: (map['speed'] as num).toDouble(),
         accuracy: (map['accuracy'] as num).toDouble(),
         status: map['status'] as String,
-        updatedAt:
-            DateTime.fromMillisecondsSinceEpoch(map['updatedAt'] as int),
-        expiresAt:
-            DateTime.fromMillisecondsSinceEpoch(map['expiresAt'] as int),
+        updatedAt: parseFirestoreDate(map['updatedAt']),
+        expiresAt: parseFirestoreDate(map['expiresAt']),
       );
 }

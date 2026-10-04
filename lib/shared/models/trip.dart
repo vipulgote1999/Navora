@@ -1,3 +1,4 @@
+import '../../core/utils/firestore_date.dart';
 import '../../core/utils/join_code.dart' as join_code;
 
 /// Trip status lifecycle: planning -> active -> completed.
@@ -56,9 +57,8 @@ class Trip {
         hostUid: map['hostUid'] as String,
         joinCode: map['joinCode'] as String,
         maxParticipants: map['maxParticipants'] as int,
-        // Tolerant of docs written before createdAt existed.
-        createdAt: map['createdAt'] is int
-            ? DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int)
-            : DateTime.now(),
+        // Tolerant of docs written before createdAt existed, millis as
+        // int/num, DateTime, or Firestore Timestamp (see firestore_date.dart).
+        createdAt: parseFirestoreDate(map['createdAt']),
       );
 }

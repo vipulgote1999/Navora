@@ -36,8 +36,12 @@ service cloud.firestore {
 
     // Live convoy positions: only the authenticated owner may write
     // their own document (doc id == auth uid).
+    // TODO(P0-02): move to nested trips/{tripId}/live/{uid} member-readable
+    // per spec; current top-level live/{docId} is read-deny by design until
+    // the nest lands. Do NOT restructure here — P0-02 owns the move.
     match /live/{docId} {
-      allow write: if request.auth != null && request.auth.uid == docId;
+      allow write: if request.auth != null && request.auth.uid == docId
+        && !isDemoUid();
       allow read: if false;
     }
 

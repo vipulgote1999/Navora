@@ -1,4 +1,8 @@
+import '../../core/utils/firestore_date.dart';
+
 /// Pre-canned quick messages a rider can broadcast.
+// TODO(P0-02): spec defines 7 quick-message templates; this enum currently
+// carries 5. Align toward the spec 7 without breaking existing tests/usages.
 enum QuickMessageType {
   needFuel,
   needRestroom,
@@ -45,8 +49,7 @@ class QuickMessage {
         tripId: map['tripId'] as String,
         senderUid: map['senderUid'] as String,
         type: QuickMessageType.values.byName(map['type'] as String),
-        sentAt: DateTime.fromMillisecondsSinceEpoch(map['sentAt'] as int),
-        expiresAt:
-            DateTime.fromMillisecondsSinceEpoch(map['expiresAt'] as int),
+        sentAt: parseFirestoreDate(map['sentAt']),
+        expiresAt: parseFirestoreDate(map['expiresAt']),
       );
 }

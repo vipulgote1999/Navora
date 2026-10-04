@@ -43,7 +43,7 @@ class MockTripDataSource implements TripRepository {
     required String origin,
     required String destination,
     required String hostUid,
-    int maxParticipants = 8,
+    int maxParticipants = 5,
   }) async {
     if (_isDemoUid(hostUid)) {
       throw StateError('Demo UIDs cannot create real trips.');
@@ -99,6 +99,12 @@ class MockTripDataSource implements TripRepository {
       throw StateError('No trip found for join code $code.');
     }
     final members = _members.putIfAbsent(tripId, () => {});
+    // Capacity check: host counts toward maxParticipants (spec P0<=5).
+    if (!members.containsKey(uid) && members.length >= trip.maxParticipants) {
+      throw StateError(
+        'Trip is full (max ${trip.maxParticipants} participants).',
+      );
+    }
     members.putIfAbsent(
       uid,
       () => Member(

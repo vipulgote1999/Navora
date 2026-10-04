@@ -125,5 +125,34 @@ void main() {
           );
       expect(member.vehicleType, 'Car');
     });
+
+    test('joinTrip throws when trip is full', () async {
+      final ds = await _repo();
+      final trip = await ds.createTrip(
+        name: 'Small Ride',
+        origin: 'A',
+        destination: 'B',
+        hostUid: 'host-uid',
+        maxParticipants: 2,
+      );
+      await ds.joinTrip(trip.joinCode, uid: 'rider-2');
+      expect(
+        () => ds.joinTrip(trip.joinCode, uid: 'rider-3'),
+        throwsStateError,
+      );
+      // Re-joining an existing member does not count as over capacity.
+      await ds.joinTrip(trip.joinCode, uid: 'rider-2');
+    });
+
+    test('createTrip defaults maxParticipants to 5 (spec P0<=5)', () async {
+      final ds = await _repo();
+      final trip = await ds.createTrip(
+        name: 'Default Cap',
+        origin: 'A',
+        destination: 'B',
+        hostUid: 'mock-uid',
+      );
+      expect(trip.maxParticipants, 5);
+    });
   });
 }

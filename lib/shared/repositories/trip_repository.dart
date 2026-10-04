@@ -8,7 +8,7 @@ abstract class TripRepository {
     required String origin,
     required String destination,
     required String hostUid,
-    int maxParticipants = 8,
+    int maxParticipants = 5,
   });
 
   Future<Trip> joinTrip(String code, {required String uid});

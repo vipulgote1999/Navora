@@ -39,6 +39,7 @@ class MockAuthDataSource implements AuthRepository {
 
   @override
   Future<AppUser> signInWithEmail(String email, String password) async {
+    // mock ignores password
     final user = AppUser(
       uid: 'mock-uid',
       email: email,
