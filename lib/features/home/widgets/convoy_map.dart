@@ -134,7 +134,11 @@ class ConvoyMap extends ConsumerWidget {
             TextSourceAttribution('CARTO'),
           ],
           // Open on load so attribution is visible (and testable) immediately.
-          popupInitialDisplayDuration: Duration(seconds: 5),
+          // Zero auto-hide duration: the popup still renders on the first
+          // frame, but no 5s Timer outlives the widget-test fake clock
+          // (MapShell's drawer test settles via pumpAndSettle, which never
+          // advances 5s, and teardown fails on pending timers).
+          popupInitialDisplayDuration: Duration.zero,
         ),
       ],
     );
