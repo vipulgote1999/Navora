@@ -36,6 +36,7 @@ class TripVibeSheet extends ConsumerWidget {
     final tripsAsync = ref.watch(watchTripsProvider);
     // Loading shows the same empty text as no-trips; error shows retry.
     final allTrips = tripsAsync.value ?? const <Trip>[];
+    final memberCounts = ref.watch(tripMemberCountsProvider);
     final query = ref.watch(searchQueryProvider);
     final trips = filterTripsByQuery(allTrips, query);
     final selectedId = ref.watch(selectedTripIdProvider);
@@ -163,8 +164,7 @@ class TripVibeSheet extends ConsumerWidget {
                       padding: const EdgeInsets.only(bottom: 8),
                       child: TripCard(
                         trip: trip,
-                        memberCount:
-                            ref.watch(tripMembersProvider(trip.id)).length,
+                        memberCount: memberCounts[trip.id] ?? 0,
                       ),
                     ),
               ],

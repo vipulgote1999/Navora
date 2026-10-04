@@ -21,9 +21,10 @@ final watchTripsProvider = StreamProvider<List<Trip>>((ref) {
   return Stream.value(const <Trip>[]);
 });
 
-/// Members of [tripId]. Downcast lives here next to [watchTripsProvider];
-/// widgets must use this, never `repo as/is MockTripDataSource`. Watches
-/// [watchTripsProvider] so create/join emissions refresh counts/lists.
+/// Members of [tripId]. Downcast lives here next to [watchTripsProvider].
+/// Single-key watches only (e.g. the convoy map's focused trip) — list UIs
+/// with a variable number of rows must use [tripMemberCountsProvider] /
+/// [userTripIdsProvider] below, never one family watch per row.
 final tripMembersProvider =
     Provider.family<List<Member>, String>((ref, tripId) {
       // Rebuild on trip-list emissions; value itself is unused.
@@ -31,6 +32,39 @@ final tripMembersProvider =
       final repo = ref.watch(tripRepositoryProvider);
       if (repo is MockTripDataSource) return repo.membersFor(tripId);
       return const <Member>[];
+    });
+
+/// Member count per trip id, computed in ONE place. List UIs watch this
+/// once and look up `counts[id] ?? 0` per row instead of watching
+/// [tripMembersProvider] inside dynamic loops (variable watch count is a
+/// Riverpod anti-pattern). Rebuilds on [watchTripsProvider] emissions.
+final tripMemberCountsProvider = Provider<Map<String, int>>((ref) {
+  // Rebuild on trip-list emissions; value itself is unused.
+  ref.watch(watchTripsProvider);
+  final repo = ref.watch(tripRepositoryProvider);
+  if (repo is MockTripDataSource) {
+    return {
+      for (final trip in repo.trips.values)
+        trip.id: repo.membersFor(trip.id).length,
+    };
+  }
+  return const <String, int>{};
+});
+
+/// Trip ids [uid] is a member of. Keyed by uid so consumers make ONE stable
+/// watch call per build instead of one family watch per trip row.
+final userTripIdsProvider =
+    Provider.family<Set<String>, String>((ref, uid) {
+      // Rebuild on trip-list emissions; value itself is unused.
+      ref.watch(watchTripsProvider);
+      final repo = ref.watch(tripRepositoryProvider);
+      if (repo is MockTripDataSource) {
+        return {
+          for (final trip in repo.trips.values)
+            if (repo.membersFor(trip.id).any((m) => m.uid == uid)) trip.id,
+        };
+      }
+      return const <String>{};
     });
 
 /// Live positions for [tripId], empty until P0-02 wires real GPS writes.

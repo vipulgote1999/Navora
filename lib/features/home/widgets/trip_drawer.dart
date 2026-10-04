@@ -21,6 +21,7 @@ class TripDrawer extends ConsumerWidget {
     final tripsAsync = ref.watch(watchTripsProvider);
     // Loading shows the same empty text as no-trips; error shows retry.
     final allTrips = tripsAsync.value ?? const <Trip>[];
+    final memberCounts = ref.watch(tripMemberCountsProvider);
     final trips = filterTripsByQuery(allTrips, ref.watch(searchQueryProvider));
     final user = authState.value;
 
@@ -86,7 +87,7 @@ class TripDrawer extends ConsumerWidget {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: TripCard(
                   trip: trip,
-                  memberCount: ref.watch(tripMembersProvider(trip.id)).length,
+                  memberCount: memberCounts[trip.id] ?? 0,
                 ),
               ),
         ],

@@ -136,15 +136,13 @@ class YouTripsOverlay extends ConsumerWidget {
     final user = ref.watch(authStateProvider).value;
     final tripsAsync = ref.watch(watchTripsProvider);
     final trips = tripsAsync.value ?? const <Trip>[];
+    final memberCounts = ref.watch(tripMemberCountsProvider);
+    // ONE stable watch (empty-uid key when signed out); rows below use
+    // plain map lookups, never per-row family watches.
+    final myIds = ref.watch(userTripIdsProvider(user?.uid ?? ''));
     final mine = user == null
         ? const <Trip>[]
-        : trips
-              .where(
-                (t) => ref
-                    .watch(tripMembersProvider(t.id))
-                    .any((m) => m.uid == user.uid),
-              )
-              .toList();
+        : trips.where((t) => myIds.contains(t.id)).toList();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -185,8 +183,7 @@ class YouTripsOverlay extends ConsumerWidget {
                     padding: const EdgeInsets.only(bottom: 8),
                     child: TripCard(
                       trip: trip,
-                      memberCount:
-                          ref.watch(tripMembersProvider(trip.id)).length,
+                      memberCount: memberCounts[trip.id] ?? 0,
                     ),
                   ),
             ],
