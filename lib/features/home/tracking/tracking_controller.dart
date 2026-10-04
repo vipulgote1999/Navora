@@ -9,14 +9,18 @@ import 'package:tripmesh/features/home/tracking/fix_throttle.dart';
 /// Throttled live-GPS writer owned by [MapShell] lifecycle.
 ///
 /// [start] is idempotent (second call returns true without re-subscribing)
-/// and returns false — without throwing — when permission is denied,
-/// revoked, or the stream errors, so the caller can show the existing
-/// `Location off` SnackBar. [stop] cancels the stream; safe to call idle.
+/// and returns false — without throwing — when permission is unavailable
+/// or the stream errors. Silent by default: only `checkPermission`, never
+/// `requestPermission`, never a prompt without a user tap — the caller
+/// ignores a silent `false`. Pass `interactive: true` from an explicit
+/// user gesture (e.g. a location button) to allow `requestPermission`;
+/// the caller then shows the `Location off` SnackBar on `false`.
+/// [stop] cancels the stream; safe to call idle.
 ///
-/// The first fix after [start] is always published (no baseline to
-/// throttle against); later fixes pass through [acceptFix]. The OS-level
-/// `distanceFilter: 15` pre-filter matches the 15m throttle constant.
-/// Heading follows the unchanged rule: `speed > 1` else null.
+/// The first fix after [start] still drops `accuracy > 50m`; later fixes
+/// pass through [acceptFix]. The OS-level `distanceFilter: 15` pre-filter
+/// matches the 15m throttle constant. Heading follows the unchanged rule:
+/// `speed > 1` else null.
 class TrackingController {
   StreamSubscription<Position>? _sub;
   Position? _lastFix;
@@ -24,14 +28,17 @@ class TrackingController {
 
   bool get isTracking => _sub != null;
 
-  Future<bool> start(WidgetRef ref) async {
+  Future<bool> start(WidgetRef ref, {bool interactive = false}) async {
     if (_sub != null) return true;
     try {
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.denied ||
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied && interactive) {
+        final requested = await Geolocator.requestPermission();
+        if (requested == LocationPermission.denied ||
+            requested == LocationPermission.deniedForever) {
+          return false;
+        }
+      } else if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
         return false;
       }
@@ -53,7 +60,10 @@ class TrackingController {
   void _onFix(WidgetRef ref, Position pos, DateTime now) {
     final last = _lastFix;
     final lastTime = _lastTime;
-    if (last != null && lastTime != null) {
+    if (last == null || lastTime == null) {
+      // No baseline: publish unless the fix itself is too poor.
+      if (pos.accuracy > 50) return;
+    } else {
       final distM = Geolocator.distanceBetween(
         last.latitude,
         last.longitude,

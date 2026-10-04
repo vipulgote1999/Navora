@@ -1,10 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tripmesh/features/home/tracking/fix_throttle.dart';
 
-/// Boundary table from the P1 spec (Global Constraints):
+/// Boundary table from the P1 spec (Global Constraints) + reviewer ruling:
 /// accept iff (dist > 15m AND dt > 5s) OR dt > 60s;
 /// drop accuracy > 50m; ignore <10m jumps when speed < 2m/s.
-/// Vetoes (accuracy, jitter) win over the 60s heartbeat.
+/// Ruling order: accuracy veto → heartbeat (accepts regardless of
+/// distance/jitter) → dist/dt gate with jitter ignore.
 void main() {
   group('acceptFix boundaries', () {
     test('normal accept: dist > 15 AND dt > 5', () {
@@ -84,10 +85,10 @@ void main() {
       );
     });
 
-    test('jitter veto beats heartbeat when stationary', () {
+    test('heartbeat beats jitter when stationary', () {
       expect(
         acceptFix(distM: 5, dtSec: 61, accuracyM: 10, speedMps: 0.5),
-        isFalse,
+        isTrue,
       );
     });
 

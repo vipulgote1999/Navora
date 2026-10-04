@@ -50,26 +50,25 @@ class _MapShellState extends ConsumerState<MapShell>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    _syncTracking();
+    _syncTracking(resumed: state == AppLifecycleState.resumed);
   }
 
   /// Tracks only on Explore (index 0) while resumed; otherwise the stream
-  /// halts (battery). A denied/revoked permission stops cleanly with the
-  /// existing SnackBar, never a crash.
-  Future<void> _syncTracking() async {
-    final resumed = WidgetsBinding.instance.lifecycleState == null ||
-        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+  /// halts (battery). Auto-start is silent: `checkPermission` only, no
+  /// prompt, no SnackBar — a silent `false` is ignored and retried on the
+  /// next lifecycle/nav event. Explicit permission UX lives in [MapFabs].
+  Future<void> _syncTracking({bool? resumed}) async {
+    final isResumed =
+        resumed ??
+        (WidgetsBinding.instance.lifecycleState == null ||
+            WidgetsBinding.instance.lifecycleState ==
+                AppLifecycleState.resumed);
     final onExplore = ref.read(navIndexProvider) == 0;
-    if (!onExplore || !resumed) {
+    if (!onExplore || !isResumed) {
       await _tracker.stop();
       return;
     }
-    final ok = await _tracker.start(ref);
-    if (!ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Location off — showing trip area')),
-      );
-    }
+    await _tracker.start(ref);
   }
 
   @override
