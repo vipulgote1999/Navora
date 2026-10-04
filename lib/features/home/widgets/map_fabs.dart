@@ -12,6 +12,22 @@ final directionsUri = Uri.parse(
   'https://www.google.com/maps/dir/?api=1&destination=$defaultMapCenterLat,$defaultMapCenterLng',
 );
 
+/// Directions link to ([destLat], [destLng]) from [origin].
+///
+/// Origin omitted → Google Maps starts from the device's current location.
+/// [MapFabs] passes the last GPS fix when known so navigation starts
+/// immediately with no extra prompt.
+Uri directionsUriTo(double destLat, double destLng, {LatLng? origin}) {
+  final params = <String, String>{
+    'api': '1',
+    'destination': '$destLat,$destLng',
+  };
+  if (origin != null) {
+    params['origin'] = '${origin.latitude},${origin.longitude}';
+  }
+  return Uri.https('www.google.com', '/maps/dir/', params);
+}
+
 /// Map floating actions: my-location + directions.
 ///
 /// Location sets [mapFollowModeProvider] to [FollowMode.me]; when permission
@@ -112,9 +128,19 @@ class MapFabs extends ConsumerWidget {
     }
   }
 
-  Future<void> _directions() async {
+  Future<void> _directions(WidgetRef ref) async {
     try {
-      await launchUrl(directionsUri, mode: LaunchMode.externalApplication);
+      // Prefer the pinned search result; else the default trip area.
+      // Origin is the last GPS fix when known (instant navigation).
+      final focus = ref.read(searchFocusProvider);
+      final origin = ref.read(myPositionProvider);
+      final uri = focus != null
+          ? directionsUriTo(focus.lat, focus.lng, origin: origin)
+          : origin != null
+              ? directionsUriTo(
+                  defaultMapCenterLat, defaultMapCenterLng, origin: origin)
+              : directionsUri;
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (_) {
       // Offline / no handler: stay on the map, never crash.
     }
@@ -147,7 +173,7 @@ class MapFabs extends ConsumerWidget {
             child: FloatingActionButton(
               backgroundColor: Colors.teal,
               foregroundColor: Colors.white,
-              onPressed: _directions,
+              onPressed: () => _directions(ref),
               child: const Icon(Icons.directions),
             ),
           ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
 import 'package:tripmesh/features/home/widgets/map_fabs.dart';
@@ -27,6 +28,20 @@ class TripVibeSheet extends ConsumerWidget {
   Future<void> _navigate() async {
     try {
       await launchUrl(directionsUri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      // Offline / no handler: stay on the map, never crash.
+    }
+  }
+
+  /// Navigates to a searched place from the last GPS fix when known
+  /// (Google Maps opens with "Your location" otherwise).
+  Future<void> _navigateToPlace(
+      double destLat, double destLng, LatLng? origin) async {
+    try {
+      await launchUrl(
+        directionsUriTo(destLat, destLng, origin: origin),
+        mode: LaunchMode.externalApplication,
+      );
     } catch (_) {
       // Offline / no handler: stay on the map, never crash.
     }
@@ -67,6 +82,8 @@ class TripVibeSheet extends ConsumerWidget {
     final stale = ageSec > 90;
     final savedIds = ref.watch(savedTripIdsProvider);
     final isSaved = resolved != null && savedIds.contains(resolved.id);
+    final searchPlace = ref.watch(searchFocusProvider);
+    final origin = ref.watch(myPositionProvider);
 
     return DraggableScrollableSheet(
       controller: controller,
@@ -100,6 +117,90 @@ class TripVibeSheet extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
+                if (searchPlace != null) ...[
+                  Row(
+                    children: [
+                      const Icon(Icons.place, color: Colors.red),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              searchPlace.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            Text(
+                              searchPlace.subtitle,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Semantics(
+                        label: 'Dismiss search result',
+                        button: true,
+                        child: IconButton(
+                          icon: const Icon(Icons.close),
+                          constraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 48,
+                          ),
+                          onPressed: () => ref
+                              .read(searchFocusProvider.notifier)
+                              .state = null,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(48, 48),
+                          ),
+                          onPressed: () => _navigateToPlace(
+                            searchPlace.lat,
+                            searchPlace.lng,
+                            origin,
+                          ),
+                          icon: const Icon(Icons.navigation),
+                          label: const Text('Navigate'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(48, 48),
+                          ),
+                          onPressed: () async {
+                            try {
+                              await Share.share(
+                                '${searchPlace.title}\n'
+                                'https://www.openstreetmap.org/'
+                                '?mlat=${searchPlace.lat}'
+                                '&mlon=${searchPlace.lng}'
+                                '#map=15/${searchPlace.lat}/${searchPlace.lng}',
+                              );
+                            } catch (_) {
+                              // No share target: stay on the map.
+                            }
+                          },
+                          icon: const Icon(Icons.share_outlined),
+                          label: const Text('Share'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 24),
+                ],
                 Text(
                   focus?.name ?? 'Trip vibe',
                   style: Theme.of(context).textTheme.titleLarge,
