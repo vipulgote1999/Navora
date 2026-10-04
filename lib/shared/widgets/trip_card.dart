@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:tripmesh/shared/models/trip.dart';
 
-/// P0 card for one trip: name, route, participants `n/m`, status.
+/// P0 card for one trip: name, date, route, participants `n/m`, status.
 ///
 /// [status] overrides the trip's own status when the caller tracks a
 /// liveness-derived value; defaults to `trip.status`.
@@ -22,9 +22,10 @@ class TripCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effectiveStatus = status ?? trip.status;
+    final date = formatTripDate(trip.createdAt);
     return Semantics(
       label:
-          'Trip ${trip.name}, ${trip.origin} to ${trip.destination}, '
+          'Trip ${trip.name}, on $date, ${trip.origin} to ${trip.destination}, '
           '$memberCount of ${trip.maxParticipants} riders, '
           'status ${effectiveStatus.name}',
       container: true,
@@ -37,6 +38,14 @@ class TripCard extends StatelessWidget {
               Text(
                 trip.name,
                 style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Icon(Icons.calendar_today, size: 16),
+                  const SizedBox(width: 4),
+                  Text(date),
+                ],
               ),
               const SizedBox(height: 4),
               Row(
@@ -65,4 +74,11 @@ class TripCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Formats [date] as `YYYY-MM-DD` (local). Kept dependency-free (no intl).
+String formatTripDate(DateTime date) {
+  final local = date.toLocal();
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${local.year}-${two(local.month)}-${two(local.day)}';
 }

@@ -20,7 +20,10 @@ class Trip {
   final String joinCode;
   final int maxParticipants;
 
-  const Trip({
+  /// When the trip was created. Defaults to now; serialized as millis.
+  final DateTime createdAt;
+
+  Trip({
     required this.id,
     required this.name,
     required this.origin,
@@ -29,7 +32,8 @@ class Trip {
     required this.hostUid,
     required this.joinCode,
     required this.maxParticipants,
-  });
+    DateTime? createdAt,
+  }) : createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toMap() => {
         'id': id,
@@ -40,6 +44,7 @@ class Trip {
         'hostUid': hostUid,
         'joinCode': joinCode,
         'maxParticipants': maxParticipants,
+        'createdAt': createdAt.millisecondsSinceEpoch,
       };
 
   factory Trip.fromMap(Map<String, dynamic> map) => Trip(
@@ -51,5 +56,9 @@ class Trip {
         hostUid: map['hostUid'] as String,
         joinCode: map['joinCode'] as String,
         maxParticipants: map['maxParticipants'] as int,
+        // Tolerant of docs written before createdAt existed.
+        createdAt: map['createdAt'] is int
+            ? DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int)
+            : DateTime.now(),
       );
 }

@@ -16,6 +16,7 @@ void main() {
         hostUid: 'host-uid-1',
         joinCode: 'TRIP-AB12',
         maxParticipants: 8,
+        createdAt: DateTime.fromMillisecondsSinceEpoch(1759531200000),
       );
       final restored = Trip.fromMap(trip.toMap());
       expect(restored.id, trip.id);
@@ -26,6 +27,25 @@ void main() {
       expect(restored.hostUid, trip.hostUid);
       expect(restored.joinCode, trip.joinCode);
       expect(restored.maxParticipants, trip.maxParticipants);
+      expect(restored.createdAt, trip.createdAt);
+    });
+
+    test('createdAt defaults to now when omitted', () {
+      final before = DateTime.now();
+      final trip = Trip(
+        id: 'trip-2',
+        name: 'No Date Ride',
+        origin: 'A',
+        destination: 'B',
+        status: TripStatus.planning,
+        hostUid: 'host-uid-1',
+        joinCode: 'TRIP-CD34',
+        maxParticipants: 4,
+      );
+      expect(
+        trip.createdAt.isAfter(before.subtract(const Duration(seconds: 5))),
+        isTrue,
+      );
     });
 
     test('joinCode matches ^TRIP-[A-Z0-9]{4}\$', () {

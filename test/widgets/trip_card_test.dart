@@ -9,7 +9,7 @@ import 'package:tripmesh/features/trips/providers/trip_providers.dart';
 import 'package:tripmesh/shared/models/trip.dart';
 import 'package:tripmesh/shared/widgets/trip_card.dart';
 
-const _sampleTrip = Trip(
+final _sampleTrip = Trip(
   id: 'trip_1',
   name: 'Weekend Ride',
   origin: 'Pune',
@@ -18,18 +18,20 @@ const _sampleTrip = Trip(
   hostUid: 'mock-uid',
   joinCode: 'TRIP-AB12',
   maxParticipants: 8,
+  createdAt: DateTime(2026, 10, 4),
 );
 
 Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
 
 void main() {
   group('TripCard', () {
-    testWidgets('shows name + destination + n/m + status', (tester) async {
+    testWidgets('shows name + date + destination + n/m + status', (tester) async {
       await tester.pumpWidget(
-        _wrap(const TripCard(trip: _sampleTrip, memberCount: 2)),
+        _wrap(TripCard(trip: _sampleTrip, memberCount: 2)),
       );
 
       expect(find.text('Weekend Ride'), findsOneWidget);
+      expect(find.text('2026-10-04'), findsOneWidget);
       expect(find.text('Lonavala'), findsOneWidget);
       expect(find.text('2/8'), findsOneWidget);
       expect(find.text('planning'), findsOneWidget);
