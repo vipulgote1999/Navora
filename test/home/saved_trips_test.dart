@@ -65,5 +65,12 @@ void main() {
 
     await toggleSavedTrip(ref2, 't1');
     expect(c2.read(savedTripIdsProvider), isNot(contains('t1')));
+
+    // Third container reload proves the removal persisted (not just in-memory).
+    final c3 = ProviderContainer();
+    addTearDown(c3.dispose);
+    final ref3 = await _widgetRef(t, c3);
+    await loadSavedTripIds(ref3);
+    expect(c3.read(savedTripIdsProvider), isNot(contains('t1')));
   });
 }

@@ -11,7 +11,7 @@ final tripRepositoryProvider = Provider<TripRepository>((ref) {
   return MockTripDataSource();
 });
 
-/// All trips as a stream. Single [MockTripDataSource] downcast site in
+/// All trips as a stream. Mock downcasts live only in this file (widgets must use the providers below) in
 /// non-test app code: non-mock repos fall back to an empty stream until a
 /// Firestore-backed `watchAllTrips` exists. All widgets consume this instead
 /// of downcasting the repo themselves.

@@ -82,7 +82,7 @@ Future<void> toggleSavedTrip(WidgetRef ref, String id) async {
   ref.read(savedTripIdsProvider.notifier).state = current;
   try {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(savedTripIdsKey, current.toList());
+    await prefs.setStringList(savedTripIdsKey, current.toList()..sort());
   } catch (_) {
     // Persist failed: in-memory state still updated, never throw.
   }
