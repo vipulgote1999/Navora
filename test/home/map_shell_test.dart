@@ -15,5 +15,7 @@ void main() {
     await t.tap(find.bySemanticsLabel('Open TripMesh menu'));
     await t.pumpAndSettle();
     expect(find.byType(TripDrawer), findsOneWidget);
+    // Flush the attribution popup auto-hide timer so teardown is clean.
+    await t.pump(const Duration(seconds: 6));
   });
 }
