@@ -57,13 +57,17 @@ void main() {
           child: const MaterialApp(home: HomeScreen()),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      // Flush 5s attribution timer + OSM tile retries (pumpAndSettle never
+      // settles: timer + tile retries keep scheduling frames).
+      await tester.pump(const Duration(seconds: 6));
 
       // Maps-home shell: Create/Join live in the drawer; the recent list
       // shows in the vibe sheet (and the drawer once opened).
       expect(find.text('Weekend Ride'), findsWidgets);
       tester.state<ScaffoldState>(find.byType(Scaffold)).openDrawer();
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
 
       expect(find.text('Create trip'), findsOneWidget);
       expect(find.text('Join trip'), findsOneWidget);
