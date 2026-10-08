@@ -11,11 +11,22 @@ import 'package:navora/features/navigation/route_providers.dart';
 ///
 /// Shown only while navigating with a loaded route and known position.
 /// Pure display — reroute/arrival logic lives in the route card listener.
-class NavHeaderBanner extends ConsumerWidget {
+/// Google Maps reference (Nav SDK): floating dark-green card, radius 12,
+/// horizontal margin 8, left 90px column (55px maneuver icon + distance
+/// below), right column road/instruction 18-22 bold. Tap expands to
+/// preview the next 1-2 steps.
+class NavHeaderBanner extends ConsumerStatefulWidget {
   const NavHeaderBanner({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<NavHeaderBanner> createState() => _NavHeaderBannerState();
+}
+
+class _NavHeaderBannerState extends ConsumerState<NavHeaderBanner> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
     final navigating = ref.watch(navigatingProvider);
     final route = ref.watch(routeProvider).value;
     final me = ref.watch(myPositionProvider);
@@ -23,55 +34,133 @@ class NavHeaderBanner extends ConsumerWidget {
       return const SizedBox.shrink();
     }
     final index = nearestStepIndex(route, me);
-    final step = route.steps[index.clamp(0, route.steps.length - 1)];
+    final current = index.clamp(0, route.steps.length - 1);
+    final step = route.steps[current];
     final toManeuver = const Distance().as(LengthUnit.Meter, me, step.location);
+    final upcoming = route.steps
+        .skip(current + 1)
+        .take(2)
+        .toList(growable: false);
 
     return Semantics(
       label: 'Next maneuver',
       container: true,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-        child: Material(
-          elevation: 4,
-          color: Colors.green.shade700,
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              children: [
-                Icon(
-                  maneuverIcon(step.maneuverType, step.modifier),
-                  color: Colors.white,
-                  size: 36,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
+        padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+        child: GestureDetector(
+          onTap: upcoming.isEmpty
+              ? null
+              : () => setState(() => _expanded = !_expanded),
+          child: Material(
+            elevation: 4,
+            color: const Color(0xFF188038),
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding:
+                  const EdgeInsets.only(top: 16, bottom: 8, left: 16, right: 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Text(
-                        step.instruction,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
+                      SizedBox(
+                        width: 90,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              maneuverIcon(
+                                  step.maneuverType, step.modifier),
+                              color: Colors.white,
+                              size: 55,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'In ${formatStepDistance(toManeuver)}',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'In ${formatStepDistance(toManeuver)}',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 13,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          step.instruction,
+                          maxLines: _expanded ? 4 : 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 19,
+                            fontWeight: FontWeight.bold,
+                            height: 1.2,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-              ],
+                  if (_expanded)
+                    for (final next in upcoming)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Row(
+                          children: [
+                            Icon(
+                              maneuverIcon(
+                                  next.maneuverType, next.modifier),
+                              color: Colors.white.withAlpha(200),
+                              size: 22,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                next.instruction,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white.withAlpha(200),
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              formatStepDistance(next.distanceM),
+                              style: TextStyle(
+                                color: Colors.white.withAlpha(200),
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  if (route.steps.length > 1)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        for (var i = 0;
+                            i < route.steps.length.clamp(0, 20);
+                            i++)
+                          Container(
+                            width: 6,
+                            height: 6,
+                            margin: const EdgeInsets.symmetric(
+                                horizontal: 2, vertical: 4),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: i == current
+                                  ? Colors.white
+                                  : Colors.white.withAlpha(100),
+                            ),
+                          ),
+                      ],
+                    ),
+                ],
+              ),
             ),
           ),
         ),

@@ -162,6 +162,11 @@ class MapFabs extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Google Maps: once guiding, the directions entry disappears — only
+    // recenter (My location) stays so a pan-break can be resumed.
+    // Controls are white circular with grey icons (Maps-style), the
+    // directions action is Google blue.
+    final navigating = ref.watch(navigatingProvider);
     Widget hitBox(Widget child) => ConstrainedBox(
       constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
       child: Center(child: child),
@@ -174,24 +179,32 @@ class MapFabs extends ConsumerWidget {
             label: 'My location',
             button: true,
             child: FloatingActionButton.small(
+              heroTag: 'my-location',
+              backgroundColor: Colors.white,
+              foregroundColor: const Color(0xFF5F6368),
+              elevation: 2,
               onPressed: () => _locate(context, ref),
               child: const Icon(Icons.my_location),
             ),
           ),
         ),
-        const SizedBox(height: 12),
-        hitBox(
-          Semantics(
-            label: 'Get directions',
-            button: true,
-            child: FloatingActionButton(
-              backgroundColor: Colors.teal,
-              foregroundColor: Colors.white,
-              onPressed: () => _directions(ref),
-              child: const Icon(Icons.directions),
+        if (!navigating) ...[
+          const SizedBox(height: 12),
+          hitBox(
+            Semantics(
+              label: 'Get directions',
+              button: true,
+              child: FloatingActionButton(
+                heroTag: 'get-directions',
+                backgroundColor: const Color(0xFF1A73E8),
+                foregroundColor: Colors.white,
+                elevation: 2,
+                onPressed: () => _directions(ref),
+                child: const Icon(Icons.directions),
+              ),
             ),
           ),
-        ),
+        ],
       ],
     );
   }

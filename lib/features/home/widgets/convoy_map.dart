@@ -194,6 +194,24 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
 
   void _onMapEvent(MapEvent event) {
     if (event is MapEventMoveEnd) _schedulePoiFetch();
+    // Google Maps: a manual pan breaks follow so continuous tracking
+    // never fights the user. Programmatic moves (mapController/custom/
+    // fitCamera) and simple taps must not break it — the recenter FAB
+    // (My location) restores FollowMode.me.
+    if (event is MapEventMoveStart || event is MapEventMove) {
+      final s = event.source;
+      final isUserGesture = s != MapEventSource.mapController &&
+          s != MapEventSource.custom &&
+          s != MapEventSource.fitCamera &&
+          s != MapEventSource.nonRotatedSizeChange &&
+          s != MapEventSource.tap &&
+          s != MapEventSource.secondaryTap &&
+          s != MapEventSource.longPress;
+      if (isUserGesture &&
+          ref.read(mapFollowModeProvider) != FollowMode.none) {
+        ref.read(mapFollowModeProvider.notifier).state = FollowMode.none;
+      }
+    }
   }
 
   void _schedulePoiFetch() {
@@ -236,14 +254,19 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
     // Post-frame: the controller may not be attached yet on first listen.
     // FollowMode.me targets the real GPS fix; without one yet (or for
     // convoy) fall back to the trip area. Never jump to a stale default
-    // as if it were the user's position.
+    // as if it were the user's position. Navigation zooms closer (16)
+    // Google-Maps-style; plain follow-me stays at default+1.
     final me = ref.read(myPositionProvider);
+    final navigating = ref.read(navigatingProvider);
     final target = (mode == FollowMode.me && me != null)
         ? me
         : convoyMapCenter;
-    final zoom = (mode == FollowMode.me && me != null)
-        ? defaultMapZoom + 1
-        : defaultMapZoom;
+    final double zoom;
+    if (mode == FollowMode.me && me != null) {
+      zoom = navigating ? 16.0 : defaultMapZoom + 1;
+    } else {
+      zoom = defaultMapZoom;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       try {
         _mapController.move(target, zoom);
@@ -253,12 +276,49 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
     });
   }
 
+  /// Immediate jump to the current fix (Google Maps: tap Navigate and the
+  /// camera is already on the blue dot — no waiting for the next GPS tick).
+  /// No-op without a fix; the first-fix listener centers when GPS arrives.
+  void _moveToMeNow({double zoom = 16.0}) {
+    final me = ref.read(myPositionProvider);
+    if (me == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        _mapController.move(me, zoom);
+      } catch (_) {
+        // Controller not attached yet: stay put.
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen<FollowMode>(mapFollowModeProvider, (_, next) => _follow(next));
-    // Startup auto-center: the first real fix while following me moves
-    // the camera once. Later fixes must not fight the user's panning.
+    // Entering navigation jumps straight to the current fix (Google Maps:
+    // Navigate disappears, camera is already on the blue dot). Covers the
+    // two cases _follow/auto-center miss: followMode was already me (no
+    // refire) and myPosition was already known (prev != null).
+    ref.listen<bool>(navigatingProvider, (_, navigating) {
+      if (!navigating) return;
+      if (ref.read(mapFollowModeProvider) != FollowMode.me) return;
+      _moveToMeNow();
+    });
+    // Position updates: continuous tracking while navigating + following
+    // (Google Maps — the camera rides the blue dot). Outside navigation
+    // keep first-fix-only so later fixes never fight the user's panning.
     ref.listen<LatLng?>(myPositionProvider, (prev, next) {
+      if (next == null) return;
+      if (ref.read(mapFollowModeProvider) != FollowMode.me) return;
+      if (ref.read(navigatingProvider)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          try {
+            _mapController.move(next, 16.0);
+          } catch (_) {
+            // Controller not attached yet: stay put.
+          }
+        });
+        return;
+      }
       if (!shouldAutoCenter(
         mode: ref.read(mapFollowModeProvider),
         prev: prev,
@@ -268,7 +328,7 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
       }
       WidgetsBinding.instance.addPostFrameCallback((_) {
         try {
-          _mapController.move(next!, defaultMapZoom + 1);
+          _mapController.move(next, defaultMapZoom + 1);
         } catch (_) {
           // Controller not attached yet: stay put.
         }
@@ -358,7 +418,7 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
         if (routes.isNotEmpty)
           PolylineLayer(
             polylines: [
-              // Gray alternates first, selected route (teal) on top —
+              // Gray alternates first, selected route (Google blue) on top —
               // Maps-style: alternates visible but clearly unselected.
               for (var i = 0; i < routes.length; i++)
                 if (routes[i].points.length >= 2 &&
@@ -383,7 +443,8 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
             polylines: [
               Polyline(
                 points: activeRoute.points,
-                color: Theme.of(context).colorScheme.primary,
+                // Google Maps route blue — never theme teal while guiding.
+                color: const Color(0xFF4285F4),
                 strokeWidth: 5,
               ),
             ],

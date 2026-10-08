@@ -88,11 +88,17 @@ class TripVibeSheet extends ConsumerWidget {
     final searchPlace = ref.watch(searchFocusProvider);
     final routeRequested = ref.watch(routeOriginProvider) != null &&
         ref.watch(routeDestinationProvider) != null;
+    // Google Maps: once guiding, the Navigate entries disappear — the
+    // sheet becomes route-only (ETA + End + steps in _RouteSection).
+    final navigating = ref.watch(navigatingProvider);
 
     return DraggableScrollableSheet(
       controller: controller,
-      initialChildSize: 0.22,
-      minChildSize: 0.12,
+      // Google Maps: nav peek is taller so the ETA (time + distance •
+      // arrival + End) is fully visible without a drag — explore peek
+      // stays compact.
+      initialChildSize: navigating ? 0.32 : 0.22,
+      minChildSize: navigating ? 0.22 : 0.12,
       maxChildSize: 0.75,
       expand: false,
       builder: (context, scrollController) {
@@ -145,161 +151,171 @@ class TripVibeSheet extends ConsumerWidget {
                           ],
                         ),
                       ),
-                      Semantics(
-                        label: 'Dismiss search result',
-                        button: true,
-                        child: IconButton(
-                          icon: const Icon(Icons.close),
-                          constraints: const BoxConstraints(
-                            minWidth: 48,
-                            minHeight: 48,
+                      // Google Maps: destination is locked while guiding —
+                      // dismiss returns with End/Clear, not mid-navigation.
+                      if (!navigating)
+                        Semantics(
+                          label: 'Dismiss search result',
+                          button: true,
+                          child: IconButton(
+                            icon: const Icon(Icons.close),
+                            constraints: const BoxConstraints(
+                              minWidth: 48,
+                              minHeight: 48,
+                            ),
+                            onPressed: () => ref
+                                .read(searchFocusProvider.notifier)
+                                .state = null,
                           ),
-                          onPressed: () => ref
-                              .read(searchFocusProvider.notifier)
-                              .state = null,
                         ),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size(48, 48),
+                  // Google Maps: while guiding the Navigate/Share entry is
+                  // gone — _RouteSection below owns ETA + End + steps.
+                  if (!navigating)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(48, 48),
+                            ),
+                            onPressed: () => _startRoute(
+                              ref,
+                              LatLng(searchPlace.lat, searchPlace.lng),
+                              context,
+                            ),
+                            icon: const Icon(Icons.navigation),
+                            label: const Text('Navigate'),
                           ),
-                          onPressed: () => _startRoute(
-                            ref,
-                            LatLng(searchPlace.lat, searchPlace.lng),
-                            context,
-                          ),
-                          icon: const Icon(Icons.navigation),
-                          label: const Text('Navigate'),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(48, 48),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(48, 48),
+                            ),
+                            onPressed: () async {
+                              try {
+                                await Share.share(
+                                  '${searchPlace.title}\n'
+                                  'https://www.openstreetmap.org/'
+                                  '?mlat=${searchPlace.lat}'
+                                  '&mlon=${searchPlace.lng}'
+                                  '#map=15/${searchPlace.lat}/${searchPlace.lng}',
+                                );
+                              } catch (_) {
+                                // No share target: stay on the map.
+                              }
+                            },
+                            icon: const Icon(Icons.share_outlined),
+                            label: const Text('Share'),
                           ),
-                          onPressed: () async {
-                            try {
-                              await Share.share(
-                                '${searchPlace.title}\n'
-                                'https://www.openstreetmap.org/'
-                                '?mlat=${searchPlace.lat}'
-                                '&mlon=${searchPlace.lng}'
-                                '#map=15/${searchPlace.lat}/${searchPlace.lng}',
-                              );
-                            } catch (_) {
-                              // No share target: stay on the map.
-                            }
-                          },
-                          icon: const Icon(Icons.share_outlined),
-                          label: const Text('Share'),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
                   const Divider(height: 24),
                 ],
                 if (routeRequested) ...[
                   const _RouteSection(),
                   const Divider(height: 24),
                 ],
-                Text(
-                  focus?.name ?? 'Trip vibe',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 4),
-                if (resolved != null)
-                  Chip(
-                    label: Text('Last updated ${ageSec}s ago'),
-                    labelStyle: TextStyle(
-                      color: stale
-                          ? Theme.of(context).colorScheme.outline
-                          : Theme.of(context).colorScheme.onSurface,
-                    ),
+                // Google Maps: guiding hides vibe summary + trip list — the
+                // sheet is route-only until End/Clear restores explore UI.
+                if (!navigating) ...[
+                  Text(
+                    focus?.name ?? 'Trip vibe',
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(48, 48),
+                  const SizedBox(height: 4),
+                  if (resolved != null)
+                    Chip(
+                      label: Text('Last updated ${ageSec}s ago'),
+                      labelStyle: TextStyle(
+                        color: stale
+                            ? Theme.of(context).colorScheme.outline
+                            : Theme.of(context).colorScheme.onSurface,
                       ),
-                      onPressed: () => _startRoute(
-                        ref,
-                        const LatLng(
-                          defaultMapCenterLat,
-                          defaultMapCenterLng,
+                    ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(48, 48),
                         ),
-                        context,
+                        onPressed: () => _startRoute(
+                          ref,
+                          const LatLng(
+                            defaultMapCenterLat,
+                            defaultMapCenterLng,
+                          ),
+                          context,
+                        ),
+                        child: const Text('Navigate'),
                       ),
-                      child: const Text('Navigate'),
-                    ),
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(48, 48),
-                      ),
-                      onPressed: resolved == null
-                          ? null
-                          : () async {
-                              try {
-                                await Share.share(shareTextFor(resolved));
-                              } catch (_) {
-                                // No share target: stay on the map, never crash.
-                              }
-                            },
-                      child: const Text('Share'),
-                    ),
-                    Semantics(
-                      button: true,
-                      label: isSaved ? 'Unsave trip' : 'Save trip',
-                      child: TextButton(
+                      TextButton(
                         style: TextButton.styleFrom(
                           minimumSize: const Size(48, 48),
                         ),
                         onPressed: resolved == null
                             ? null
                             : () async {
-                                await toggleSavedTrip(ref, resolved.id);
+                                try {
+                                  await Share.share(shareTextFor(resolved));
+                                } catch (_) {
+                                  // No share target: stay on the map, never crash.
+                                }
                               },
-                        child: Text(isSaved ? 'Saved ✓' : 'Save'),
+                        child: const Text('Share'),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                if (tripsAsync.hasError)
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text("Couldn't load trips"),
-                      ),
-                      TextButton(
-                        style: TextButton.styleFrom(
-                          minimumSize: const Size(48, 48),
+                      Semantics(
+                        button: true,
+                        label: isSaved ? 'Unsave trip' : 'Save trip',
+                        child: TextButton(
+                          style: TextButton.styleFrom(
+                            minimumSize: const Size(48, 48),
+                          ),
+                          onPressed: resolved == null
+                              ? null
+                              : () async {
+                                  await toggleSavedTrip(ref, resolved.id);
+                                },
+                          child: Text(isSaved ? 'Saved ✓' : 'Save'),
                         ),
-                        onPressed: () =>
-                            ref.invalidate(watchTripsProvider),
-                        child: const Text('Retry'),
                       ),
                     ],
-                  )
-                else if (trips.isEmpty)
-                  const Text('No trips yet — create one to get started.')
-                else
-                  for (final trip in trips)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: TripCard(
-                        trip: trip,
-                        memberCount: memberCounts[trip.id] ?? 0,
+                  ),
+                  const SizedBox(height: 8),
+                  if (tripsAsync.hasError)
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text("Couldn't load trips"),
+                        ),
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            minimumSize: const Size(48, 48),
+                          ),
+                          onPressed: () =>
+                              ref.invalidate(watchTripsProvider),
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    )
+                  else if (trips.isEmpty)
+                    const Text('No trips yet — create one to get started.')
+                  else
+                    for (final trip in trips)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: TripCard(
+                          trip: trip,
+                          memberCount: memberCounts[trip.id] ?? 0,
+                        ),
                       ),
-                    ),
+                ],
               ],
             ),
           ),
@@ -480,6 +496,10 @@ class _RouteSection extends ConsumerWidget {
                   onPressed: () {
                     clearRoute(ref);
                     ref.read(routeNoticeProvider.notifier).state = null;
+                    // Exiting via X also drops follow so the camera stops
+                    // tracking and explore UI (Navigate/FABs) returns.
+                    ref.read(mapFollowModeProvider.notifier).state =
+                        FollowMode.none;
                   },
                 ),
               ),
@@ -502,47 +522,68 @@ class _RouteSection extends ConsumerWidget {
               ],
             ),
           ],
-          // ETA card while guiding, full-width Start otherwise.
+          // Google Maps ETA footer: white card, 28px green time +
+          // 16px grey distance • ETA. Reference: Nav SDK
+          // CustomNavigationFooterExample (radius 12, padding 20/8).
           if (navigating && route != null) ...[
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        formatLongDuration(route.durationS),
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineSmall
-                            ?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.error,
-                            ),
-                      ),
-                      Text(
-                        '${(route.distanceM / 1000).toStringAsFixed(1)} km · ${formatArrivalTime(route.durationS)}',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
+            Container(
+              width: double.infinity,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(25),
+                    blurRadius: 8,
+                    offset: const Offset(0, -2),
                   ),
-                ),
-                TextButton(
-                  style: TextButton.styleFrom(
-                    minimumSize: const Size(48, 48),
-                    foregroundColor:
-                        Theme.of(context).colorScheme.error,
+                ],
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          formatLongDuration(route.durationS),
+                          style: TextStyle(
+                            color: Colors.green.shade800,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w500,
+                            height: 1.1,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${(route.distanceM / 1000).toStringAsFixed(1)} km · ${formatArrivalTime(route.durationS)}',
+                          style: TextStyle(
+                            color: Colors.grey.shade700,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  onPressed: () {
-                    ref.read(navigatingProvider.notifier).state = false;
-                    ref.read(mapFollowModeProvider.notifier).state =
-                        FollowMode.none;
-                  },
-                  child: const Text('End'),
-                ),
-              ],
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(48, 48),
+                      foregroundColor:
+                          Theme.of(context).colorScheme.error,
+                    ),
+                    onPressed: () {
+                      ref.read(navigatingProvider.notifier).state = false;
+                      ref.read(mapFollowModeProvider.notifier).state =
+                          FollowMode.none;
+                    },
+                    child: const Text('End'),
+                  ),
+                ],
+              ),
             ),
           ] else if (route != null) ...[
             const SizedBox(height: 8),
