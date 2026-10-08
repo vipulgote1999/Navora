@@ -221,8 +221,62 @@ void main() {
       expect(find.bySemanticsLabel('Route details'), findsNothing);
     });
 
-    testWidgets('arrival stops navigation with notice', (t) async {
-      final dest = const LatLng(18.6645, 73.9512);
+    testWidgets('first fix re-anchors fallback origin', (t) async {
+      const fallback =
+          LatLng(defaultMapCenterLat, defaultMapCenterLng);
+      final fix = LatLng(fallback.latitude + 0.0004, fallback.longitude);
+      final fake = FakeRoutingRepository(sampleRoute());
+      await pumpSheet(t, overrides: [
+        routingRepositoryProvider.overrideWithValue(fake),
+        routeOriginProvider.overrideWith((ref) => fallback),
+        routeDestinationProvider.overrideWith(
+            (ref) => const LatLng(18.6645, 73.9512)),
+        navigatingProvider.overrideWith((ref) => true),
+      ]);
+      final container =
+          ProviderScope.containerOf(t.element(find.byType(TripVibeSheet)));
+      container.read(myPositionProvider.notifier).state = fix;
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 100));
+      // Origin follows the real fix (still navigating: no arrival here).
+      expect(container.read(routeOriginProvider), fix);
+      expect(container.read(navigatingProvider), isTrue);
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('simulate drive moves the fix along the route', (t) async {
+      final fake = FakeRoutingRepository(sampleRoute());
+      await pumpSheet(t, overrides: [
+        routingRepositoryProvider.overrideWithValue(fake),
+        routeOriginProvider.overrideWith(
+            (ref) => const LatLng(18.6545, 73.9412)),
+        routeDestinationProvider.overrideWith(
+            (ref) => const LatLng(18.6645, 73.9512)),
+        navigatingProvider.overrideWith((ref) => true),
+        myPositionProvider.overrideWith(
+            (ref) => const LatLng(18.6545, 73.9412)),
+      ]);
+      final container =
+          ProviderScope.containerOf(t.element(find.byType(TripVibeSheet)));
+      await t.tap(find.bySemanticsLabel('Simulate drive'));
+      await t.pump();
+      await t.pump(const Duration(seconds: 3));
+      final moved = container.read(myPositionProvider);
+      expect(moved, isNotNull);
+      expect(
+        const Distance().as(
+            LengthUnit.Meter, const LatLng(18.6545, 73.9412), moved!),
+        greaterThan(5),
+      );
+      await t.tap(find.bySemanticsLabel('Stop simulation'));
+      await t.pump();
+      final frozen = container.read(myPositionProvider);
+      await t.pump(const Duration(seconds: 2));
+      expect(container.read(myPositionProvider), frozen);
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('arrival stops navigation with notice', (t) async {      final dest = const LatLng(18.6645, 73.9512);
       final fake = FakeRoutingRepository(sampleRoute());
       await pumpSheet(t, overrides: [
         routingRepositoryProvider.overrideWithValue(fake),

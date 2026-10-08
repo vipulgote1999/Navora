@@ -64,3 +64,27 @@ bool shouldUpdateCamera({
   final turn = ((nextHeading - prevHeading + 540) % 360) - 180;
   return turn.abs() > 3;
 }
+
+/// Course-made-good bearing from [last] to [next], or null.
+///
+/// Null without a baseline or below [minDistM] (GPS jitter guard).
+/// Used when the device reports no heading (slow/stationary fixes) but
+/// displacement shows real motion.
+double? courseMadeGood(LatLng? last, LatLng next, {double minDistM = 10}) {
+  if (last == null) return null;
+  if (const Distance().as(LengthUnit.Meter, last, next) < minDistM) {
+    return null;
+  }
+  return bearingBetween(last, next);
+}
+
+/// Initial bearing in degrees from [a] to [b] (0 = north).
+double bearingBetween(LatLng a, LatLng b) {
+  final lat1 = a.latitude * math.pi / 180;
+  final lat2 = b.latitude * math.pi / 180;
+  final dLng = (b.longitude - a.longitude) * math.pi / 180;
+  final y = math.sin(dLng) * math.cos(lat2);
+  final x = math.cos(lat1) * math.sin(lat2) -
+      math.sin(lat1) * math.cos(lat2) * math.cos(dLng);
+  return (math.atan2(y, x) * 180 / math.pi + 360) % 360;
+}

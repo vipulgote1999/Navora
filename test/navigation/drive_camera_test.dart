@@ -26,6 +26,33 @@ void main() {
     });
   });
 
+  group('courseMadeGood', () {
+    test('null without baseline', () {
+      expect(courseMadeGood(null, const LatLng(18.0, 73.0)), isNull);
+    });
+
+    test('null below min distance (jitter guard)', () {
+      expect(
+        courseMadeGood(
+            const LatLng(18.0, 73.0), const LatLng(18.00001, 73.0)),
+        isNull,
+      );
+    });
+
+    test('bearing north/east beyond min distance', () {
+      expect(
+        courseMadeGood(
+            const LatLng(18.0, 73.0), const LatLng(18.001, 73.0)),
+        closeTo(0, 0.5),
+      );
+      expect(
+        courseMadeGood(
+            const LatLng(18.0, 73.0), const LatLng(18.0, 73.001)),
+        closeTo(90, 0.5),
+      );
+    });
+  });
+
   group('forwardMetersForZoom', () {
     test('zoom 16 near Pune is a few hundred metres', () {
       final m = forwardMetersForZoom(16, 18.65);

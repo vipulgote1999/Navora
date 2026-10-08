@@ -3,7 +3,17 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'route_models.dart';
+import 'drive_simulator.dart';
 import 'routing_repository.dart';
+
+/// On-device mock drive (see `drive_simulator.dart`). Same instance per
+/// container so UI toggles and tests share run state.
+final driveSimulatorProvider = Provider<DriveSimulator>((ref) {
+  return DriveSimulator();
+});
+
+/// True while the mock drive is writing synthetic fixes.
+final simulatingProvider = StateProvider<bool>((ref) => false);
 
 /// HTTP routing engine. Override in tests with a fake client-backed repo.
 final routingRepositoryProvider = Provider<RoutingRepository>((ref) {

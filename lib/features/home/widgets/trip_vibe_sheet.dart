@@ -394,10 +394,26 @@ class _RouteSection extends ConsumerWidget {
       final route = ref.read(routeProvider).value;
       final dest = ref.read(routeDestinationProvider);
       if (route == null || dest == null) return;
+      // Arrival always wins.
       if (const Distance().as(LengthUnit.Meter, next, dest) <= 25) {
         ref.read(navigatingProvider.notifier).state = false;
         ref.read(routeNoticeProvider.notifier).state =
             'Arrived at destination ✓';
+        return;
+      }
+      // First real fix after a fallback start: the origin froze as the
+      // trip area because no fix existed yet. Re-anchor to the fix when
+      // it is near the route (a far fix is the reroute case below).
+      // Returns early: deviation is re-evaluated against the refetched
+      // route.
+      const fallback =
+          LatLng(defaultMapCenterLat, defaultMapCenterLng);
+      final origin = ref.read(routeOriginProvider);
+      if (origin != null &&
+          origin == fallback &&
+          const Distance().as(LengthUnit.Meter, origin, next) > 25 &&
+          minDistanceToRouteM(route, next) <= 50) {
+        ref.read(routeOriginProvider.notifier).state = next;
         return;
       }
       if (minDistanceToRouteM(route, next) > 50) {
@@ -576,11 +592,48 @@ class _RouteSection extends ConsumerWidget {
                           Theme.of(context).colorScheme.error,
                     ),
                     onPressed: () {
+                      ref.read(driveSimulatorProvider).stop();
+                      ref.read(simulatingProvider.notifier).state = false;
                       ref.read(navigatingProvider.notifier).state = false;
                       ref.read(mapFollowModeProvider.notifier).state =
                           FollowMode.none;
                     },
                     child: const Text('End'),
+                  ),
+                  Builder(
+                    builder: (context) {
+                      final simulating = ref.watch(simulatingProvider);
+                      return Semantics(
+                        label: simulating
+                            ? 'Stop simulation'
+                            : 'Simulate drive',
+                        button: true,
+                        child: IconButton(
+                          icon: Icon(simulating
+                              ? Icons.stop
+                              : Icons.play_arrow),
+                          constraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 48,
+                          ),
+                          tooltip: simulating
+                              ? 'Stop mock drive'
+                              : 'Simulate drive along route',
+                          onPressed: () {
+                            final sim =
+                                ref.read(driveSimulatorProvider);
+                            if (simulating) {
+                              sim.stop();
+                              ref
+                                  .read(simulatingProvider.notifier)
+                                  .state = false;
+                            } else {
+                              sim.start(ref, route);
+                            }
+                          },
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
