@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tripmesh/features/home/places/geocode_repository.dart';
-import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
-import 'package:tripmesh/features/home/widgets/trip_drawer.dart';
-import 'package:tripmesh/features/home/widgets/trip_nav_bar.dart';
-import 'package:tripmesh/features/home/widgets/trip_vibe_sheet.dart';
+import 'package:navora/features/home/places/geocode_repository.dart';
+import 'package:navora/features/home/providers/map_ui_providers.dart';
+import 'package:navora/features/home/widgets/trip_drawer.dart';
+import 'package:navora/features/home/widgets/trip_nav_bar.dart';
+import 'package:navora/features/home/widgets/trip_vibe_sheet.dart';
 
 void main() {
   testWidgets('empty trips shows empty-state + drawer lists TripCards', (

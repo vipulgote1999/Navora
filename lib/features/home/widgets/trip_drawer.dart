@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tripmesh/features/auth/providers/auth_providers.dart';
-import 'package:tripmesh/features/home/home_screen.dart';
-import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
-import 'package:tripmesh/features/trips/providers/trip_providers.dart';
-import 'package:tripmesh/shared/models/trip.dart';
-import 'package:tripmesh/shared/widgets/trip_card.dart';
+import 'package:navora/features/auth/providers/auth_providers.dart';
+import 'package:navora/features/home/home_screen.dart';
+import 'package:navora/features/home/providers/map_ui_providers.dart';
+import 'package:navora/features/trips/providers/trip_providers.dart';
+import 'package:navora/shared/models/trip.dart';
+import 'package:navora/shared/widgets/trip_card.dart';
 
 /// Drawer for the maps-home shell: auth line, Create/Join entry points,
 /// and the recent-trips list. Create/Join push the placeholder screens from

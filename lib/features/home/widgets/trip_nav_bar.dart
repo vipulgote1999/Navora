@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
+import 'package:navora/features/home/providers/map_ui_providers.dart';
 
 /// Bottom navigation for the maps-home shell.
 ///
