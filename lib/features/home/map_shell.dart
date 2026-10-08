@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:tripmesh/features/auth/providers/auth_providers.dart';
 import 'package:tripmesh/features/home/home_screen.dart';
 import 'package:tripmesh/features/home/map/map_tiles.dart';
 import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
+import 'package:tripmesh/features/home/tracking/location_permission.dart';
 import 'package:tripmesh/features/home/tracking/tracking_controller.dart';
 import 'package:tripmesh/features/home/widgets/assist_chips.dart';
 import 'package:tripmesh/features/home/widgets/convoy_map.dart';
@@ -39,6 +41,10 @@ class _MapShellState extends ConsumerState<MapShell>
   final _tracker = TrackingController();
   ProviderSubscription<int>? _navSub;
 
+  /// One-shot startup centering (Google Maps behaviour). Runs once per
+  /// process from [initState]; see [_startupLocation].
+  bool _startupLocated = false;
+
   @override
   void initState() {
     super.initState();
@@ -50,6 +56,28 @@ class _MapShellState extends ConsumerState<MapShell>
     _syncTracking();
     // One-shot hydrate of saved trip ids; failures stay in-memory only.
     unawaited(loadSavedTripIds(ref));
+    // Ask the OS location prompt at most once per install, then center.
+    unawaited(_startupLocation());
+  }
+
+  /// First-launch centering: the OS prompt fires at most once per install
+  /// ([requestPermissionOnce] persists the asked flag before prompting,
+  /// so even a kill mid-prompt never re-prompts). When granted, the
+  /// stream starts and [FollowMode.me] is set so [ConvoyMap] flies to
+  /// the first real fix. Denied → stay on the trip area, stay silent.
+  /// Runs once per process; [requestPermissionOnce] never throws.
+  Future<void> _startupLocation() async {
+    if (_startupLocated) return;
+    _startupLocated = true;
+    final status = await requestPermissionOnce();
+    if (!mounted) return;
+    if (status != LocationPermission.whileInUse &&
+        status != LocationPermission.always) {
+      return;
+    }
+    await _tracker.start(ref);
+    if (!mounted) return;
+    ref.read(mapFollowModeProvider.notifier).state = FollowMode.me;
   }
 
   @override

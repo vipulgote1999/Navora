@@ -10,6 +10,7 @@ import 'package:tripmesh/features/home/places/geocode_repository.dart';
 import 'package:tripmesh/features/home/places/place_poi.dart';
 import 'package:tripmesh/features/home/places/places_repository.dart';
 import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
+import 'package:tripmesh/features/home/tracking/location_permission.dart';
 import 'package:tripmesh/features/navigation/route_providers.dart';
 import 'package:tripmesh/features/trips/providers/trip_providers.dart';
 import 'package:tripmesh/shared/models/live_position.dart';
@@ -259,6 +260,24 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         try {
           _mapController.move(LatLng(next.lat, next.lng), 15);
+        } catch (_) {
+          // Controller not attached yet: stay put.
+        }
+      });
+    });
+    // Startup auto-center: the first real fix while following me moves
+    // the camera once. Later fixes must not fight the user's panning.
+    ref.listen<LatLng?>(myPositionProvider, (prev, next) {
+      if (!shouldAutoCenter(
+        mode: ref.read(mapFollowModeProvider),
+        prev: prev,
+        next: next,
+      )) {
+        return;
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        try {
+          _mapController.move(next!, defaultMapZoom + 1);
         } catch (_) {
           // Controller not attached yet: stay put.
         }

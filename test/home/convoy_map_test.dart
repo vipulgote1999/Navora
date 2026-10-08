@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
 import 'package:tripmesh/features/home/widgets/convoy_map.dart';
 import 'package:tripmesh/features/home/widgets/map_fabs.dart';
@@ -84,6 +85,22 @@ void main() {
     expect(find.bySemanticsLabel('Get directions'), findsOneWidget);
     await t.tap(find.bySemanticsLabel('Get directions'));
     await t.pump();
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('first fix while following me runs auto-center', (t) async {
+    await t.pumpWidget(
+      ProviderScope(
+        overrides: [mapFollowModeProvider.overrideWith((ref) => FollowMode.me)],
+        child: const MaterialApp(home: Scaffold(body: ConvoyMap())),
+      ),
+    );
+    await t.pump(const Duration(seconds: 6));
+    ProviderScope.containerOf(
+      t.element(find.byType(ConvoyMap)),
+    ).read(myPositionProvider.notifier).state = const LatLng(18.52, 73.85);
+    await t.pump();
+    await t.pump(const Duration(seconds: 6));
     expect(t.takeException(), isNull);
   });
 }

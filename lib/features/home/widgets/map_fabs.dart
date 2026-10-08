@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
+import 'package:tripmesh/features/home/tracking/location_permission.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Google Maps directions deep link for the default trip area.
@@ -40,22 +41,16 @@ class MapFabs extends ConsumerWidget {
 
   /// Bounded by [locationTimeout]: a hung location stack (or test env with
   /// no geolocator plugin) falls through to the denied SnackBar, never a
-  /// dead button or a crash.
+  /// dead button or a crash. The OS prompt itself is once-per-install
+  /// ([requestPermissionOnce]); repeat taps only re-check.
   static const locationTimeout = Duration(seconds: 3);
 
   Future<LocationPermission> _permission() async {
     try {
-      var permission = await Geolocator.checkPermission().timeout(
+      return await requestPermissionOnce().timeout(
         locationTimeout,
         onTimeout: () => LocationPermission.denied,
       );
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission().timeout(
-          locationTimeout,
-          onTimeout: () => LocationPermission.denied,
-        );
-      }
-      return permission;
     } catch (_) {
       return LocationPermission.denied;
     }
