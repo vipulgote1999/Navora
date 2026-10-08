@@ -4,29 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
-import 'package:url_launcher/url_launcher.dart';
-
-/// Google Maps directions deep link for the default trip area.
-final directionsUri = Uri.parse(
-  'https://www.google.com/maps/dir/?api=1&destination=$defaultMapCenterLat,$defaultMapCenterLng',
-);
-
-/// Directions link to ([destLat], [destLng]) from [origin].
-///
-/// Origin omitted → Google Maps starts from the device's current location.
-/// [MapFabs] passes the last GPS fix when known so navigation starts
-/// immediately with no extra prompt.
-Uri directionsUriTo(double destLat, double destLng, {LatLng? origin}) {
-  final params = <String, String>{
-    'api': '1',
-    'destination': '$destLat,$destLng',
-  };
-  if (origin != null) {
-    params['origin'] = '${origin.latitude},${origin.longitude}';
-  }
-  return Uri.https('www.google.com', '/maps/dir/', params);
-}
+import 'package:navora/features/home/providers/map_ui_providers.dart';
+import 'package:navora/features/navigation/route_providers.dart';
 
 /// Map floating actions: my-location + directions.
 ///
@@ -34,7 +13,8 @@ Uri directionsUriTo(double destLat, double destLng, {LatLng? origin}) {
 /// is denied (or geolocator throws, e.g. offline/test env) a SnackBar
 /// `Location off — showing trip area` is shown instead. Permanently denied
 /// (`deniedForever`) adds a `Settings` action opening app settings.
-/// Directions opens the Google Maps link via url_launcher and never throws.
+/// Directions starts free in-app routing — nothing here ever opens an
+/// external maps app.
 class MapFabs extends ConsumerWidget {
   const MapFabs({super.key});
 
@@ -128,22 +108,23 @@ class MapFabs extends ConsumerWidget {
     }
   }
 
-  Future<void> _directions(WidgetRef ref) async {
-    try {
-      // Prefer the pinned search result; else the default trip area.
-      // Origin is the last GPS fix when known (instant navigation).
-      final focus = ref.read(searchFocusProvider);
-      final origin = ref.read(myPositionProvider);
-      final uri = focus != null
-          ? directionsUriTo(focus.lat, focus.lng, origin: origin)
-          : origin != null
-              ? directionsUriTo(
-                  defaultMapCenterLat, defaultMapCenterLng, origin: origin)
-              : directionsUri;
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (_) {
-      // Offline / no handler: stay on the map, never crash.
-    }
+  /// Starts free in-app routing (OSRM, no keys, never leaves the app).
+  ///
+  /// Destination prefers the pinned search result, else the default trip
+  /// area; origin is the last GPS fix when known, else the trip area.
+  /// Enables follow-me; never throws.
+  void _directions(WidgetRef ref) {
+    const fallback =
+        LatLng(defaultMapCenterLat, defaultMapCenterLng);
+    final focus = ref.read(searchFocusProvider);
+    setRouteEndpoints(
+      ref,
+      ref.read(myPositionProvider) ?? fallback,
+      focus != null ? LatLng(focus.lat, focus.lng) : fallback,
+    );
+    ref.read(routeNoticeProvider.notifier).state = null;
+    ref.read(navigatingProvider.notifier).state = true;
+    ref.read(mapFollowModeProvider.notifier).state = FollowMode.me;
   }
 
   @override

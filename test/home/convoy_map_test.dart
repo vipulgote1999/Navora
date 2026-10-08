@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
-import 'package:tripmesh/features/home/widgets/convoy_map.dart';
-import 'package:tripmesh/features/home/widgets/map_fabs.dart';
-import 'package:tripmesh/features/trips/data/mock_trip_datasource.dart';
-import 'package:tripmesh/features/trips/providers/trip_providers.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:navora/features/home/providers/map_ui_providers.dart';
+import 'package:navora/features/home/widgets/convoy_map.dart';
+import 'package:navora/features/home/widgets/map_fabs.dart';
+import 'package:navora/features/navigation/route_providers.dart';
+import 'package:navora/features/trips/data/mock_trip_datasource.dart';
+import 'package:navora/features/trips/providers/trip_providers.dart';
 
 void main() {
   testWidgets('map renders attribution + H marker + FABs', (t) async {
@@ -77,13 +79,20 @@ void main() {
     );
   });
 
-  testWidgets('directions FAB does not crash offline', (t) async {
+  testWidgets('directions FAB starts in-app routing, never external', (t) async {
     await t.pumpWidget(
       ProviderScope(child: MaterialApp(home: Scaffold(body: MapFabs()))),
     );
     expect(find.bySemanticsLabel('Get directions'), findsOneWidget);
     await t.tap(find.bySemanticsLabel('Get directions'));
     await t.pump();
+    final container =
+        ProviderScope.containerOf(t.element(find.byType(MapFabs)));
+    expect(container.read(navigatingProvider), isTrue);
+    expect(
+      container.read(routeDestinationProvider),
+      const LatLng(defaultMapCenterLat, defaultMapCenterLng),
+    );
     expect(t.takeException(), isNull);
   });
 }

@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tripmesh/features/auth/providers/auth_providers.dart';
-import 'package:tripmesh/features/home/places/places_repository.dart';
-import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
+import 'package:navora/features/auth/providers/auth_providers.dart';
+import 'package:navora/features/home/places/places_repository.dart';
+import 'package:navora/features/home/providers/map_ui_providers.dart';
 
 /// Floating maps-home search bar.
 ///
@@ -78,11 +78,11 @@ class _MapsSearchBarState extends ConsumerState<MapsSearchBar> {
         child: Row(
           children: [
             Semantics(
-              label: 'Open TripMesh menu',
+              label: 'Open Navora menu',
               button: true,
               child: IconButton(
                 icon: const Icon(Icons.menu),
-                tooltip: 'Open TripMesh menu',
+                tooltip: 'Open Navora menu',
                 constraints: const BoxConstraints(
                   minWidth: 48,
                   minHeight: 48,

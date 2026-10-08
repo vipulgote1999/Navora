@@ -5,13 +5,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' hide Path;
-import 'package:tripmesh/features/home/places/geocode_repository.dart';
-import 'package:tripmesh/features/home/places/place_poi.dart';
-import 'package:tripmesh/features/home/places/places_repository.dart';
-import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
-import 'package:tripmesh/features/trips/providers/trip_providers.dart';
-import 'package:tripmesh/shared/models/live_position.dart';
-import 'package:tripmesh/shared/models/trip.dart';
+import 'package:navora/features/home/places/geocode_repository.dart';
+import 'package:navora/features/home/places/place_poi.dart';
+import 'package:navora/features/home/places/places_repository.dart';
+import 'package:navora/features/home/providers/map_ui_providers.dart';
+import 'package:navora/features/navigation/route_models.dart';
+import 'package:navora/features/navigation/route_providers.dart';
+import 'package:navora/features/trips/providers/trip_providers.dart';
+import 'package:navora/shared/models/live_position.dart';
+import 'package:navora/shared/models/trip.dart';
 
 /// OSM standard tiles for both themes (keyless). CARTO dark_all now
 /// requires an API key, so dark mode reuses OSM to avoid the watermark.
@@ -297,6 +299,10 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
     final headingDeg = ref.watch(myHeadingDegProvider);
     final pois = ref.watch(nearbyPoisProvider);
     final searchFocus = ref.watch(searchFocusProvider);
+    final routes = ref.watch(routesProvider).value ?? const <TripRoute>[];
+    final selected = ref.watch(selectedRouteIndexProvider);
+    final selectedRoute =
+        routes.isEmpty ? null : routes[selected.clamp(0, routes.length - 1)];
 
     void select() =>
         ref.read(selectedTripIdProvider.notifier).state = activeId;
@@ -314,7 +320,7 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
         TileLayer(
           key: ValueKey<int>(_tileRetryKey),
           urlTemplate: isDark ? darkTileUrl : lightTileUrl,
-          userAgentPackageName: 'tripmesh',
+          userAgentPackageName: 'navora',
           errorTileCallback: (tile, error, stack) {},
           tileBuilder: (context, tileWidget, tile) {
             if (!tile.loadError) return tileWidget;
@@ -333,6 +339,29 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
             );
           },
         ),
+        if (routes.isNotEmpty)
+          PolylineLayer(
+            polylines: [
+              // Gray alternates first, selected route (teal) on top —
+              // Maps-style: alternates visible but clearly unselected.
+              for (var i = 0; i < routes.length; i++)
+                if (routes[i].points.length >= 2 &&
+                    routes[i] != selectedRoute)
+                  Polyline(
+                    points: routes[i].points,
+                    strokeWidth: 4,
+                    color: Colors.grey,
+                  ),
+              if (selectedRoute != null &&
+                  selectedRoute.points.length >= 2)
+                Polyline(
+                  points: selectedRoute.points,
+                  strokeWidth: 5,
+                  // Google Maps route blue (alternates stay gray).
+                  color: const Color(0xFF4285F4),
+                ),
+            ],
+          ),
         if (me != null)
           CircleLayer(
             circles: [

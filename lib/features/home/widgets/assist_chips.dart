@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tripmesh/core/utils/eta_label.dart';
-import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
-import 'package:tripmesh/features/trips/providers/trip_providers.dart';
-import 'package:tripmesh/shared/models/trip.dart';
+import 'package:navora/core/utils/eta_label.dart';
+import 'package:navora/features/home/providers/map_ui_providers.dart';
+import 'package:navora/features/trips/providers/trip_providers.dart';
+import 'package:navora/shared/models/trip.dart';
 
 /// Horizontal assist chips under the maps-home search bar.
 ///
-/// `Ask TripMesh` (stub), `ActiveTrip · ETA` (mock straight-line
+/// `Ask Navora` (stub), `ActiveTrip · ETA` (mock straight-line
 /// [formatEtaLabel] distance 12.5 km), `Stops / Food / Fuel` (stub).
 /// All chips are at least 48dp tall.
 class AssistChips extends ConsumerWidget {
@@ -69,7 +69,7 @@ class AssistChips extends ConsumerWidget {
           chip(
             ActionChip(
               avatar: const Icon(Icons.auto_awesome, size: 18),
-              label: const Text('Ask TripMesh'),
+              label: const Text('Ask Navora'),
               onPressed: comingSoon,
             ),
           ),
