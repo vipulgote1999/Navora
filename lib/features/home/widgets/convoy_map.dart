@@ -5,20 +5,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' hide Path;
+import 'package:navora/features/home/map/map_tiles.dart';
 import 'package:navora/features/home/places/geocode_repository.dart';
 import 'package:navora/features/home/places/place_poi.dart';
 import 'package:navora/features/home/places/places_repository.dart';
 import 'package:navora/features/home/providers/map_ui_providers.dart';
+import 'package:navora/features/home/tracking/location_permission.dart';
 import 'package:navora/features/navigation/route_models.dart';
 import 'package:navora/features/navigation/route_providers.dart';
 import 'package:navora/features/trips/providers/trip_providers.dart';
 import 'package:navora/shared/models/live_position.dart';
 import 'package:navora/shared/models/trip.dart';
-
-/// OSM standard tiles for both themes (keyless). CARTO dark_all now
-/// requires an API key, so dark mode reuses OSM to avoid the watermark.
-const lightTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-const darkTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 /// Shared convoy map center (Wagholi, Pune).
 const convoyMapCenter = LatLng(defaultMapCenterLat, defaultMapCenterLng);
@@ -259,6 +256,24 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
   @override
   Widget build(BuildContext context) {
     ref.listen<FollowMode>(mapFollowModeProvider, (_, next) => _follow(next));
+    // Startup auto-center: the first real fix while following me moves
+    // the camera once. Later fixes must not fight the user's panning.
+    ref.listen<LatLng?>(myPositionProvider, (prev, next) {
+      if (!shouldAutoCenter(
+        mode: ref.read(mapFollowModeProvider),
+        prev: prev,
+        next: next,
+      )) {
+        return;
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        try {
+          _mapController.move(next!, defaultMapZoom + 1);
+        } catch (_) {
+          // Controller not attached yet: stay put.
+        }
+      });
+    });
     ref.listen<PlaceSearchResult?>(searchFocusProvider, (_, next) {
       if (next == null) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -303,12 +318,13 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
     final selected = ref.watch(selectedRouteIndexProvider);
     final selectedRoute =
         routes.isEmpty ? null : routes[selected.clamp(0, routes.length - 1)];
+    final mapLayer = mapTileLayers[ref.watch(mapStyleProvider)]!;
+    final activeRoute = ref.watch(activeRouteProvider);
 
     void select() =>
         ref.read(selectedTripIdProvider.notifier).state = activeId;
 
     final colorScheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final map = FlutterMap(
       mapController: _mapController,
       options: MapOptions(
@@ -319,7 +335,7 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
       children: [
         TileLayer(
           key: ValueKey<int>(_tileRetryKey),
-          urlTemplate: isDark ? darkTileUrl : lightTileUrl,
+          urlTemplate: mapLayer.urlTemplate,
           userAgentPackageName: 'navora',
           errorTileCallback: (tile, error, stack) {},
           tileBuilder: (context, tileWidget, tile) {
@@ -360,6 +376,16 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
                   // Google Maps route blue (alternates stay gray).
                   color: const Color(0xFF4285F4),
                 ),
+            ],
+          ),
+        if (activeRoute != null)
+          PolylineLayer(
+            polylines: [
+              Polyline(
+                points: activeRoute.points,
+                color: Theme.of(context).colorScheme.primary,
+                strokeWidth: 5,
+              ),
             ],
           ),
         if (me != null)
@@ -499,9 +525,9 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
               ),
           ],
         ),
-        const RichAttributionWidget(
+        RichAttributionWidget(
           attributions: [
-            TextSourceAttribution('OpenStreetMap contributors'),
+            TextSourceAttribution(mapLayer.attribution),
           ],
           // Open on load so attribution is visible (and testable) immediately.
           popupInitialDisplayDuration: Duration(seconds: 5),

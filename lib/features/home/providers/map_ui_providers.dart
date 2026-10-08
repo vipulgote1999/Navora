@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:navora/features/home/map/map_tiles.dart';
 import 'package:navora/features/home/places/geocode_repository.dart';
 import 'package:navora/features/home/places/place_poi.dart';
 import 'package:navora/shared/models/trip.dart';
@@ -53,6 +54,9 @@ final searchingProvider = StateProvider<bool>((ref) => false);
 /// Accepted search result. [ConvoyMap] flies to it and pins it.
 final searchFocusProvider =
     StateProvider<PlaceSearchResult?>((ref) => null);
+
+/// Active base-map style. [ConvoyMap] switches tile layers on change.
+final mapStyleProvider = StateProvider<MapStyle>((ref) => MapStyle.standard);
 
 /// Default map center (Wagholi, Pune) — shared fallback for map + sheet.
 const defaultMapCenterLat = 18.6545;

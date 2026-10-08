@@ -5,7 +5,27 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navora/features/home/providers/map_ui_providers.dart';
+import 'package:navora/features/home/tracking/location_permission.dart';
 import 'package:navora/features/navigation/route_providers.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+/// Google Maps directions deep link for the default trip area (preserved
+/// from pre-merge external navigation; in-app routing is now primary).
+final directionsUri = Uri.parse(
+  'https://www.google.com/maps/dir/?api=1&destination=$defaultMapCenterLat,$defaultMapCenterLng',
+);
+
+/// Directions link to ([destLat], [destLng]) from [origin].
+Uri directionsUriTo(double destLat, double destLng, {LatLng? origin}) {
+  final params = <String, String>{
+    'api': '1',
+    'destination': '$destLat,$destLng',
+  };
+  if (origin != null) {
+    params['origin'] = '${origin.latitude},${origin.longitude}';
+  }
+  return Uri.https('www.google.com', '/maps/dir/', params);
+}
 
 /// Map floating actions: my-location + directions.
 ///
@@ -25,17 +45,10 @@ class MapFabs extends ConsumerWidget {
 
   Future<LocationPermission> _permission() async {
     try {
-      var permission = await Geolocator.checkPermission().timeout(
+      return await requestPermissionOnce().timeout(
         locationTimeout,
         onTimeout: () => LocationPermission.denied,
       );
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission().timeout(
-          locationTimeout,
-          onTimeout: () => LocationPermission.denied,
-        );
-      }
-      return permission;
     } catch (_) {
       return LocationPermission.denied;
     }
@@ -125,6 +138,26 @@ class MapFabs extends ConsumerWidget {
     ref.read(routeNoticeProvider.notifier).state = null;
     ref.read(navigatingProvider.notifier).state = true;
     ref.read(mapFollowModeProvider.notifier).state = FollowMode.me;
+  }
+
+  /// Preserved external Google Maps fallback (pre-merge behavior).
+  ///
+  /// Not wired to UI — in-app routing via [_directions] is primary.
+  /// Kept so the deep-link helpers stay tested/usable.
+  Future<void> openExternalDirections(WidgetRef ref) async {
+    try {
+      final focus = ref.read(searchFocusProvider);
+      final origin = ref.read(myPositionProvider);
+      final uri = focus != null
+          ? directionsUriTo(focus.lat, focus.lng, origin: origin)
+          : origin != null
+              ? directionsUriTo(
+                  defaultMapCenterLat, defaultMapCenterLng, origin: origin)
+              : directionsUri;
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      // Offline / no handler: stay on the map, never crash.
+    }
   }
 
   @override

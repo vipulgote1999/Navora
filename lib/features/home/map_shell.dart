@@ -2,9 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:navora/features/auth/providers/auth_providers.dart';
 import 'package:navora/features/home/home_screen.dart';
+import 'package:navora/features/home/map/map_tiles.dart';
 import 'package:navora/features/home/providers/map_ui_providers.dart';
+import 'package:navora/features/home/tracking/location_permission.dart';
 import 'package:navora/features/home/tracking/startup_location_permission.dart';
 import 'package:navora/features/home/tracking/tracking_controller.dart';
 import 'package:navora/features/home/widgets/assist_chips.dart';
@@ -39,6 +42,9 @@ class _MapShellState extends ConsumerState<MapShell>
   final _tracker = TrackingController();
   ProviderSubscription<int>? _navSub;
 
+  /// One-shot startup centering guard (feat). See [_startupLocation].
+  bool _startupLocated = false;
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +62,28 @@ class _MapShellState extends ConsumerState<MapShell>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_requestStartupPermission());
     });
+    // Feat startup centering (shares navora asked-flag via migrated key,
+    // so second call is a no-op prompt-wise but still ensures FollowMode.me).
+    unawaited(_startupLocation());
+  }
+
+  /// First-launch centering from feat: OS prompt at most once per install.
+  ///
+  /// Migrated to the Navora asked-flag (see location_permission.dart) so
+  /// calling both startup paths never double-prompts. When granted, starts
+  /// tracking and sets [FollowMode.me] so [ConvoyMap] flies to first fix.
+  Future<void> _startupLocation() async {
+    if (_startupLocated) return;
+    _startupLocated = true;
+    final status = await requestPermissionOnce();
+    if (!mounted) return;
+    if (status != LocationPermission.whileInUse &&
+        status != LocationPermission.always) {
+      return;
+    }
+    await _tracker.start(ref);
+    if (!mounted) return;
+    ref.read(mapFollowModeProvider.notifier).state = FollowMode.me;
   }
 
   @override
@@ -90,8 +118,19 @@ class _MapShellState extends ConsumerState<MapShell>
     final prompted = await ensureStartupLocationPermission();
     if (!mounted) return;
     // First launch (prompt attempted): re-sync — a grant enables tracking
-    // right away via the silent check-only start.
-    if (prompted) await _syncTracking();
+    // right away via the silent check-only start, then follow-me so the
+    // camera flies to the first fix (feat centering behavior).
+    if (prompted) {
+      await _syncTracking();
+      if (!mounted) return;
+      try {
+        final s = await Geolocator.checkPermission();
+        if (s == LocationPermission.whileInUse ||
+            s == LocationPermission.always) {
+          ref.read(mapFollowModeProvider.notifier).state = FollowMode.me;
+        }
+      } catch (_) {}
+    }
   }
 
   @override
@@ -133,6 +172,8 @@ class _MapShellState extends ConsumerState<MapShell>
                     ),
                     const SizedBox(height: 8),
                     const _SearchResultsDropdown(),
+                    const NavBanner(),
+                    const _RouteErrorLine(),
                     const AssistChips(),
                   ],
                   if (navIndex == 1) const Expanded(child: YouTripsOverlay()),
@@ -144,6 +185,11 @@ class _MapShellState extends ConsumerState<MapShell>
               right: 12,
               bottom: 180,
               child: MapFabs(),
+            ),
+            const Positioned(
+              left: 12,
+              bottom: 180,
+              child: _MapStyleButton(),
             ),
             // Anchored bottom-center: a bare sheet child would align to
             // the top of the Stack and cover the search bar.
@@ -221,6 +267,72 @@ class _SearchResultsDropdown extends ConsumerWidget {
                   },
                 ),
         ),
+      ),
+    );
+  }
+}
+
+/// Inline route-failure line under the nav banner.
+///
+/// Visible only while [routeErrorProvider] is set — a failed re-route must
+/// not silently leave a stale route on screen with no error visible. The
+/// close button dismisses it; [fetchRoute] also clears it when a new fetch
+/// starts.
+class _RouteErrorLine extends ConsumerWidget {
+  const _RouteErrorLine();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final error = ref.watch(routeErrorProvider);
+    if (error == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            children: [
+              Expanded(child: Text(error)),
+              IconButton(
+                icon: const Icon(Icons.close),
+                tooltip: 'Dismiss route error',
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(48, 48),
+                ),
+                onPressed: () {
+                  ref.read(routeErrorProvider.notifier).state = null;
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Base-map style cycler: standard → dark → satellite.
+///
+/// One control with semantics label `Map style`; [ConvoyMap] switches its
+/// tile layer (URL + attribution) off [mapStyleProvider].
+class _MapStyleButton extends ConsumerWidget {
+  const _MapStyleButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final style = ref.watch(mapStyleProvider);
+    return Semantics(
+      label: 'Map style',
+      button: true,
+      child: FloatingActionButton.small(
+        heroTag: 'map-style',
+        tooltip: 'Change map style',
+        onPressed: () {
+          final next =
+              MapStyle.values[(style.index + 1) % MapStyle.values.length];
+          ref.read(mapStyleProvider.notifier).state = next;
+        },
+        child: const Icon(Icons.layers_outlined),
       ),
     );
   }

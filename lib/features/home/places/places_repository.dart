@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'geocode_repository.dart';
+import 'photon_repository.dart';
 import 'place_poi.dart';
 
 /// Keyless POI fetch over the public Overpass API (OpenStreetMap data).
@@ -106,4 +107,18 @@ out 60;
       if (owned) httpClient.close();
     }
   }
+
+  /// Autocompletes [query] via Photon (single call site for `MapsSearchBar`).
+  Future<List<PlaceSearchResult>> searchPhoton({
+    required String query,
+    double? lat,
+    double? lng,
+    http.Client? client,
+  }) =>
+      PhotonRepository().autocomplete(
+        query: query,
+        lat: lat,
+        lng: lng,
+        client: client,
+      );
 }
