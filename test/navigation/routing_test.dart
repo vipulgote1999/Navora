@@ -1,12 +1,12 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:navora/features/home/providers/map_ui_providers.dart';
 import 'package:navora/features/home/widgets/convoy_map.dart';
 import 'package:navora/features/navigation/route_models.dart';
 import 'package:navora/features/navigation/route_icons.dart';
@@ -195,34 +195,41 @@ void main() {
     expect(captured.read(navigatingProvider), isFalse);
   });
 
-  testWidgets('ConvoyMap renders route polyline when route loads', (t) async {
+  testWidgets('ConvoyMap placeholder survives route load (native lines only)',
+      (t) async {
     final route = parseOsrmRoute(sampleOsrm())!;
     await t.pumpWidget(
       ProviderScope(
         overrides: [
           routesProvider.overrideWith((ref) => Future.value([route])),
+          mapNativeProvider.overrideWith((ref) => false),
         ],
         child: const MaterialApp(home: Scaffold(body: ConvoyMap())),
       ),
     );
     await t.pump();
     await t.pump(const Duration(seconds: 6));
-    expect(find.byType(PolylineLayer), findsOneWidget);
+    // Route polylines are MapLibre lines (native-only); the test seam
+    // renders the placeholder and must not crash on route state.
+    expect(find.bySemanticsLabel('Trip destination'), findsOneWidget);
+    expect(t.takeException(), isNull);
   });
 
-  testWidgets('ConvoyMap shows no polyline without route', (t) async {
+  testWidgets('ConvoyMap placeholder survives empty route', (t) async {
     await t.pumpWidget(
       ProviderScope(
         overrides: [
           // Explicit empty: never hit the real network in widget tests.
           routesProvider.overrideWith((ref) => Future.value(<TripRoute>[])),
+          mapNativeProvider.overrideWith((ref) => false),
         ],
         child: const MaterialApp(home: Scaffold(body: ConvoyMap())),
       ),
     );
     await t.pump();
     await t.pump(const Duration(seconds: 6));
-    expect(find.byType(PolylineLayer), findsNothing);
+    expect(find.bySemanticsLabel('Trip destination'), findsOneWidget);
+    expect(t.takeException(), isNull);
   });
 
   group('alternates + Maps helpers', () {

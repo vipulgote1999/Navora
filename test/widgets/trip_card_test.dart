@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:navora/features/auth/data/mock_auth_datasource.dart';
 import 'package:navora/features/auth/providers/auth_providers.dart';
 import 'package:navora/features/home/home_screen.dart';
+import 'package:navora/features/home/providers/map_ui_providers.dart';
 import 'package:navora/features/trips/data/mock_trip_datasource.dart';
 import 'package:navora/features/trips/providers/trip_providers.dart';
 import 'package:navora/shared/models/trip.dart';
@@ -53,6 +54,7 @@ void main() {
           overrides: [
             tripRepositoryProvider.overrideWithValue(trips),
             authRepositoryProvider.overrideWithValue(MockAuthDataSource()),
+            mapNativeProvider.overrideWith((ref) => false),
           ],
           child: const MaterialApp(home: HomeScreen()),
         ),

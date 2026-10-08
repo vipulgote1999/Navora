@@ -2,31 +2,29 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:navora/features/home/map/map_tiles.dart';
 
 void main() {
-  group('mapTileLayers', () {
+  group('mapStyleUrls', () {
     test('has all three keyless styles', () {
-      expect(mapTileLayers.keys,
+      expect(mapStyleUrls.keys,
           containsAll([MapStyle.standard, MapStyle.dark, MapStyle.satellite]));
     });
 
-    test('standard expands OSM z/x/y', () {
-      expect(tileUrlFor(MapStyle.standard, 14, 11557, 7327),
-          'https://tile.openstreetmap.org/14/11557/7327.png');
+    test('standard uses OpenFreeMap liberty', () {
+      expect(mapStyleUrl(MapStyle.standard),
+          'https://tiles.openfreemap.org/styles/liberty');
     });
 
-    test('satellite keeps Esri z/y/x order', () {
-      expect(tileUrlFor(MapStyle.satellite, 14, 11557, 7327),
+    test('dark uses OpenFreeMap dark', () {
+      expect(
+          mapStyleUrl(MapStyle.dark), 'https://tiles.openfreemap.org/styles/dark');
+    });
+
+    test('satellite keeps Esri z/y/x overlay template', () {
+      expect(esriTileUrl(14, 11557, 7327),
           'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/14/7327/11557');
     });
 
-    test('dark uses keyless Mella endpoint', () {
-      expect(tileUrlFor(MapStyle.dark, 14, 11557, 7327),
-          'https://basemap.queeniemella.cc/tiles/countries/14/11557/7327.png');
-    });
-
-    test('every layer carries attribution', () {
-      for (final l in mapTileLayers.values) {
-        expect(l.attribution.trim(), isNotEmpty);
-      }
+    test('attribution credits OSM', () {
+      expect(mapAttribution, contains('OpenStreetMap'));
     });
   });
 }

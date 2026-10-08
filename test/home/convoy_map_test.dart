@@ -13,6 +13,7 @@ void main() {
   testWidgets('map renders attribution + H marker + FABs', (t) async {
     await t.pumpWidget(
       ProviderScope(
+        overrides: [mapNativeProvider.overrideWith((ref) => false)],
         child: MaterialApp(
           home: Scaffold(
             body: Column(
@@ -48,7 +49,10 @@ void main() {
     );
     await t.pumpWidget(
       ProviderScope(
-        overrides: [tripRepositoryProvider.overrideWithValue(ds)],
+        overrides: [
+          tripRepositoryProvider.overrideWithValue(ds),
+          mapNativeProvider.overrideWith((ref) => false),
+        ],
         child: MaterialApp(home: Scaffold(body: ConvoyMap())),
       ),
     );

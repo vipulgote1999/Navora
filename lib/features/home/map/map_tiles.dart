@@ -1,61 +1,38 @@
-/// Keyless raster tile-layer definitions for the maps-home view.
+/// Keyless vector map styles for the maps-home view.
 ///
-/// No API keys, no HTTP logic — just URL templates + attribution consumed
-/// by `flutter_map` `TileLayer`s (wired in Task 5).
-/// Map style selector for the maps-home view.
+/// No API keys, no HTTP logic — just style URLs + attribution consumed by
+/// the MapLibre canvas in `ConvoyMap`. Satellite is the liberty vector
+/// base with an Esri World Imagery raster overlay added at runtime
+/// (hybrid look, still keyless).
 enum MapStyle { standard, dark, satellite }
 
-/// A single keyless raster tile layer.
-class MapTileLayer {
-  final MapStyle style;
-  final String urlTemplate;
-  final List<String> subdomains;
-  final String attribution;
-
-  const MapTileLayer({
-    required this.style,
-    required this.urlTemplate,
-    this.subdomains = const [],
-    required this.attribution,
-  });
-}
-
-/// Keyless tile layers keyed by [MapStyle].
-const Map<MapStyle, MapTileLayer> mapTileLayers = {
-  MapStyle.standard: MapTileLayer(
-    style: MapStyle.standard,
-    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    subdomains: [],
-    attribution: 'OpenStreetMap contributors',
-  ),
-  MapStyle.dark: MapTileLayer(
-    style: MapStyle.dark,
-    urlTemplate:
-        'https://basemap.queeniemella.cc/tiles/countries/{z}/{x}/{y}.png',
-    subdomains: [],
-    attribution: '© queeniemella.cc | © OpenStreetMap contributors',
-  ),
-  MapStyle.satellite: MapTileLayer(
-    style: MapStyle.satellite,
-    urlTemplate:
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    subdomains: [],
-    attribution: 'Esri, Maxar, Earthstar Geographics',
-  ),
+/// MapLibre style documents keyed by [MapStyle].
+const Map<MapStyle, String> mapStyleUrls = {
+  MapStyle.standard: 'https://tiles.openfreemap.org/styles/liberty',
+  MapStyle.dark: 'https://tiles.openfreemap.org/styles/dark',
+  // Base for satellite; the Esri overlay is added in ConvoyMap.
+  MapStyle.satellite: 'https://tiles.openfreemap.org/styles/liberty',
 };
 
-/// Expands the [style] layer template for tile coordinates (`z`, `x`, `y`).
+/// Esri World Imagery raster tiles overlaid for [MapStyle.satellite].
 ///
-/// Replaces `{z}`, `{x}`, `{y}`, and — when the layer defines subdomains —
-/// `{s}` with the first subdomain.
-String tileUrlFor(MapStyle style, int z, int x, int y) {
-  final layer = mapTileLayers[style]!;
-  var url = layer.urlTemplate
-      .replaceAll('{z}', '$z')
-      .replaceAll('{x}', '$x')
-      .replaceAll('{y}', '$y');
-  if (url.contains('{s}') && layer.subdomains.isNotEmpty) {
-    url = url.replaceAll('{s}', layer.subdomains.first);
-  }
-  return url;
-}
+/// Non-commercial use only; keep behind the style switcher, never default.
+const String esriRasterTemplate =
+    'https://server.arcgisonline.com/ArcGIS/rest/services/'
+    'World_Imagery/MapServer/tile/{z}/{y}/{x}';
+
+/// Attribution shown on the map (OpenFreeMap requires OSM credit).
+const String mapAttribution =
+    '© OpenStreetMap contributors · © OpenMapTiles';
+
+/// Style document URL for [style].
+String mapStyleUrl(MapStyle style) => mapStyleUrls[style]!;
+
+/// Expands [esriRasterTemplate] for tile coordinates (`z`, `x`, `y`).
+///
+/// Esri uses `z/y/x` order. Kept beside the style map so the satellite
+/// overlay template stays tested without a native map view.
+String esriTileUrl(int z, int x, int y) => esriRasterTemplate
+    .replaceAll('{z}', '$z')
+    .replaceAll('{x}', '$x')
+    .replaceAll('{y}', '$y');
