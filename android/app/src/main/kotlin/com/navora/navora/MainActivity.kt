@@ -1,4 +1,4 @@
-package com.tripmesh.tripmesh
+package com.navora.navora
 
 import io.flutter.embedding.android.FlutterActivity
 
