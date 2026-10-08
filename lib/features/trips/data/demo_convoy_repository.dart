@@ -7,6 +7,9 @@ import 'package:navora/shared/models/member.dart';
 
 import 'mock_trip_datasource.dart';
 
+/// Demo convoy trip id (Abhi + Bapu + Me to Bhosari).
+const demoTripId = 'demo-trip';
+
 /// Scripted convoy for the demo ride: Abhi and Bapu glide along the
 /// route polyline with human-like pace while Me navigates for real.
 ///

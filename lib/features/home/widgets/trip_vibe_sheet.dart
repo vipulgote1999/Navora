@@ -8,6 +8,8 @@ import 'package:navora/features/home/places/geocode_repository.dart';
 import 'package:navora/features/navigation/route_icons.dart';
 import 'package:navora/features/navigation/route_models.dart';
 import 'package:navora/features/navigation/route_providers.dart';
+import 'package:navora/features/trips/data/demo_bhosari_route.dart';
+import 'package:navora/features/trips/data/demo_convoy_repository.dart';
 import 'package:navora/features/trips/providers/trip_providers.dart';
 import 'package:navora/shared/models/live_position.dart';
 import 'package:navora/shared/models/trip.dart';
@@ -48,6 +50,51 @@ class TripVibeSheet extends ConsumerWidget {
         ),
       );
     }
+  }
+
+  /// Starts the scripted demo convoy to Bhosari (Abhi + Bapu + Me).
+  ///
+  /// Destination prefers the pinned search result, else the canned
+  /// Bhosari coords. Origin is the last GPS fix when known, else the
+  /// trip area. Fetches the live route; on failure the canned route
+  /// backs the pacers so the demo never dies on stage. Me navigates
+  /// through the normal guidance stack.
+  Future<void> _startDemo(WidgetRef ref, BuildContext context) async {
+    const fallback =
+        LatLng(defaultMapCenterLat, defaultMapCenterLng);
+    final focus = ref.read(searchFocusProvider);
+    final dest = focus != null
+        ? LatLng(focus.lat, focus.lng)
+        : demoBhosariDestination;
+    final origin = ref.read(myPositionProvider) ?? fallback;
+    setRouteEndpoints(ref, origin, dest);
+    ref.read(routeNoticeProvider.notifier).state = null;
+    List<LatLng> points = demoBhosariRoute.points;
+    var offline = false;
+    try {
+      final routes = await ref.read(routesProvider.future);
+      if (routes.isNotEmpty) {
+        final selected = ref.read(selectedRouteIndexProvider);
+        points = routes[selected.clamp(0, routes.length - 1)].points;
+      } else {
+        offline = true;
+      }
+    } catch (_) {
+      offline = true;
+    }
+    ref.read(demoRepositoryProvider.notifier).state =
+        DemoConvoyRepository(tripId: demoTripId, routePoints: points);
+    ref.read(selectedTripIdProvider.notifier).state = demoTripId;
+    ref.read(navigatingProvider.notifier).state = true;
+    ref.read(mapFollowModeProvider.notifier).state = FollowMode.me;
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(offline
+            ? 'Demo convoy — Abhi & Bapu riding (offline route)'
+            : 'Demo convoy — Abhi & Bapu riding'),
+      ),
+    );
   }
 
   @override
@@ -239,7 +286,9 @@ class TripVibeSheet extends ConsumerWidget {
                       ),
                     ),
                   const SizedBox(height: 8),
-                  Row(
+                  Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
                     children: [
                       TextButton(
                         style: TextButton.styleFrom(
@@ -283,6 +332,18 @@ class TripVibeSheet extends ConsumerWidget {
                                   await toggleSavedTrip(ref, resolved.id);
                                 },
                           child: Text(isSaved ? 'Saved ✓' : 'Save'),
+                        ),
+                      ),
+                      Semantics(
+                        button: true,
+                        label: 'Start demo convoy',
+                        child: TextButton.icon(
+                          style: TextButton.styleFrom(
+                            minimumSize: const Size(48, 48),
+                          ),
+                          onPressed: () => _startDemo(ref, context),
+                          icon: const Icon(Icons.groups_outlined),
+                          label: const Text('Demo convoy'),
                         ),
                       ),
                     ],
@@ -510,12 +571,10 @@ class _RouteSection extends ConsumerWidget {
                     minHeight: 48,
                   ),
                   onPressed: () {
-                    clearRoute(ref);
+                    // Full exit (also drops a demo/sim) so the camera
+                    // stops tracking and explore UI returns.
                     ref.read(routeNoticeProvider.notifier).state = null;
-                    // Exiting via X also drops follow so the camera stops
-                    // tracking and explore UI (Navigate/FABs) returns.
-                    ref.read(mapFollowModeProvider.notifier).state =
-                        FollowMode.none;
+                    exitNavigation(ref);
                   },
                 ),
               ),
@@ -591,13 +650,7 @@ class _RouteSection extends ConsumerWidget {
                       foregroundColor:
                           Theme.of(context).colorScheme.error,
                     ),
-                    onPressed: () {
-                      ref.read(driveSimulatorProvider).stop();
-                      ref.read(simulatingProvider.notifier).state = false;
-                      ref.read(navigatingProvider.notifier).state = false;
-                      ref.read(mapFollowModeProvider.notifier).state =
-                          FollowMode.none;
-                    },
+                    onPressed: () => exitNavigation(ref),
                     child: const Text('End'),
                   ),
                   Builder(

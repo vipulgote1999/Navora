@@ -133,14 +133,7 @@ class _NavHeaderBannerState extends ConsumerState<NavHeaderBanner> {
                             button: true,
                             child: InkWell(
                               borderRadius: BorderRadius.circular(20),
-                              onTap: () {
-                                ref
-                                    .read(navigatingProvider.notifier)
-                                    .state = false;
-                                ref
-                                    .read(mapFollowModeProvider.notifier)
-                                    .state = FollowMode.none;
-                              },
+                              onTap: () => exitNavigation(ref),
                               child: const Padding(
                                 padding: EdgeInsets.all(12),
                                 child: Icon(

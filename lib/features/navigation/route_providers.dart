@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:navora/features/home/providers/map_ui_providers.dart';
+import 'package:navora/features/trips/providers/trip_providers.dart';
 
 import 'route_models.dart';
 import 'drive_simulator.dart';
@@ -89,6 +91,20 @@ void clearRoute(WidgetRef ref) {
   ref.read(navigatingProvider.notifier).state = false;
   ref.read(routeOriginProvider.notifier).state = null;
   ref.read(routeDestinationProvider.notifier).state = null;
+}
+
+/// Full navigation exit: stops the mock drive, drops a running demo
+/// convoy (override + selection), then clears the route and follow mode.
+///
+/// Every End/X control must route through here so no demo residue or
+/// stray timers survive guidance.
+void exitNavigation(WidgetRef ref) {
+  ref.read(driveSimulatorProvider).stop();
+  ref.read(simulatingProvider.notifier).state = false;
+  ref.read(demoRepositoryProvider.notifier).state = null;
+  ref.read(selectedTripIdProvider.notifier).state = null;
+  clearRoute(ref);
+  ref.read(mapFollowModeProvider.notifier).state = FollowMode.none;
 }
 
 

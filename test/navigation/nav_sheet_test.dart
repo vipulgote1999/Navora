@@ -9,6 +9,8 @@ import 'package:navora/features/home/widgets/trip_vibe_sheet.dart';
 import 'package:navora/features/navigation/route_models.dart';
 import 'package:navora/features/navigation/route_providers.dart';
 import 'package:navora/features/navigation/routing_repository.dart';
+import 'package:navora/features/trips/data/demo_bhosari_route.dart';
+import 'package:navora/features/trips/providers/trip_providers.dart';
 
 TripRoute sampleRoute() => const TripRoute(
       points: [
@@ -219,6 +221,42 @@ void main() {
     testWidgets('no endpoints shows no route section', (t) async {
       await pumpSheet(t);
       expect(find.bySemanticsLabel('Route details'), findsNothing);
+    });
+
+    testWidgets('demo convoy starts guided demo with pacers', (t) async {
+      final fake = FakeRoutingRepository(sampleRoute());
+      await pumpSheet(t, overrides: [
+        routingRepositoryProvider.overrideWithValue(fake),
+      ]);
+      await t.tap(find.text('Demo convoy'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 100));
+      final container =
+          ProviderScope.containerOf(t.element(find.byType(TripVibeSheet)));
+      expect(container.read(navigatingProvider), isTrue);
+      expect(container.read(demoRepositoryProvider), isNotNull);
+      expect(
+        container.read(routeDestinationProvider),
+        demoBhosariDestination,
+      );
+      // Pacers flow through the live provider for the demo trip.
+      // Keep a live subscription (a dropped bare read never delivers),
+      // advance past the 1s pacer tick, then read synchronously.
+      container.listen(livePositionsProvider('demo-trip'), (_, _) {});
+      await t.pump();
+      await t.pump(const Duration(seconds: 2));
+      final live =
+          container.read(livePositionsProvider('demo-trip')).value;
+      expect(live, isNotNull);
+      expect(live!.map((p) => p.uid), containsAll(['abhi', 'bapu']));
+      // End exits cleanly with no residue.
+      await t.tap(find.text('End'));
+      await t.pump();
+      expect(container.read(navigatingProvider), isFalse);
+      expect(container.read(demoRepositoryProvider), isNull);
+      // Flush the demo-start SnackBar timer so teardown is clean.
+      await t.pump(const Duration(seconds: 5));
+      expect(t.takeException(), isNull);
     });
 
     testWidgets('first fix re-anchors fallback origin', (t) async {
