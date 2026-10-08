@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tripmesh/shared/models/trip.dart';
-import 'package:tripmesh/shared/models/member.dart';
-import 'package:tripmesh/shared/models/live_position.dart';
-import 'package:tripmesh/shared/models/quick_message.dart';
+import 'package:navora/shared/models/trip.dart';
+import 'package:navora/shared/models/member.dart';
+import 'package:navora/shared/models/live_position.dart';
+import 'package:navora/shared/models/quick_message.dart';
 
 void main() {
   group('Trip', () {

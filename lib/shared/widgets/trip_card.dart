@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:tripmesh/shared/models/trip.dart';
+import 'package:navora/shared/models/trip.dart';
 
 /// P0 card for one trip: name, date, route, participants `n/m`, status.
 ///

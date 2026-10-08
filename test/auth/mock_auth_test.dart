@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tripmesh/features/auth/data/mock_auth_datasource.dart';
-import 'package:tripmesh/features/auth/providers/auth_providers.dart';
-import 'package:tripmesh/shared/repositories/auth_repository.dart';
+import 'package:navora/features/auth/data/mock_auth_datasource.dart';
+import 'package:navora/features/auth/providers/auth_providers.dart';
+import 'package:navora/shared/repositories/auth_repository.dart';
 
 void main() {
   group('MockAuthDataSource', () {
@@ -27,9 +27,9 @@ void main() {
 
     test('email sign-in returns mock user with given email', () async {
       final repo = MockAuthDataSource();
-      final u = await repo.signInWithEmail('rider@tripmesh.dev', 'secret');
+      final u = await repo.signInWithEmail('rider@navora.dev', 'secret');
       expect(u.uid, startsWith('mock-'));
-      expect(u.email, 'rider@tripmesh.dev');
+      expect(u.email, 'rider@navora.dev');
     });
 
     test('watchUser emits signed-in user then null after sign-out',

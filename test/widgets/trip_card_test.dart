@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tripmesh/features/auth/data/mock_auth_datasource.dart';
-import 'package:tripmesh/features/auth/providers/auth_providers.dart';
-import 'package:tripmesh/features/home/home_screen.dart';
-import 'package:tripmesh/features/trips/data/mock_trip_datasource.dart';
-import 'package:tripmesh/features/trips/providers/trip_providers.dart';
-import 'package:tripmesh/shared/models/trip.dart';
-import 'package:tripmesh/shared/widgets/trip_card.dart';
+import 'package:navora/features/auth/data/mock_auth_datasource.dart';
+import 'package:navora/features/auth/providers/auth_providers.dart';
+import 'package:navora/features/home/home_screen.dart';
+import 'package:navora/features/trips/data/mock_trip_datasource.dart';
+import 'package:navora/features/trips/providers/trip_providers.dart';
+import 'package:navora/shared/models/trip.dart';
+import 'package:navora/shared/widgets/trip_card.dart';
 
 final _sampleTrip = Trip(
   id: 'trip_1',

@@ -1,8 +1,8 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tripmesh/core/utils/join_code.dart';
-import 'package:tripmesh/shared/models/trip.dart';
+import 'package:navora/core/utils/join_code.dart';
+import 'package:navora/shared/models/trip.dart';
 
 void main() {
   group('generateJoinCode', () {

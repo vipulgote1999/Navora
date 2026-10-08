@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tripmesh/features/trips/data/mock_trip_datasource.dart';
+import 'package:navora/features/trips/data/mock_trip_datasource.dart';
 
 Future<MockTripDataSource> _repo() async => MockTripDataSource();
 

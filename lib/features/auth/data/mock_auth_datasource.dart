@@ -19,7 +19,7 @@ class MockAuthDataSource implements AuthRepository {
   Future<AppUser> signInWithGoogle() async {
     final user = const AppUser(
       uid: 'mock-uid',
-      email: 'mock@tripmesh.dev',
+      email: 'mock@navora.dev',
       displayName: 'Mock Rider',
     );
     _setUser(user);
@@ -30,7 +30,7 @@ class MockAuthDataSource implements AuthRepository {
   Future<AppUser> signInWithApple() async {
     final user = const AppUser(
       uid: 'mock-uid',
-      email: 'mock@tripmesh.dev',
+      email: 'mock@navora.dev',
       displayName: 'Mock Rider',
     );
     _setUser(user);

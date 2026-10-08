@@ -1,5 +1,5 @@
-import 'package:tripmesh/shared/models/live_position.dart';
-import 'package:tripmesh/shared/models/trip.dart';
+import 'package:navora/shared/models/live_position.dart';
+import 'package:navora/shared/models/trip.dart';
 
 /// Trip data operations. Real Firestore + mock datasources implement this.
 abstract class TripRepository {

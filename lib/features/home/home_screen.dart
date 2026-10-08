@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tripmesh/features/home/map_shell.dart';
+import 'package:navora/features/home/map_shell.dart';
 
 /// P0 home: maps-first shell. Keeps the class name for route compat;
 /// the convoy map owns the Create/Join flows (placeholders below).
