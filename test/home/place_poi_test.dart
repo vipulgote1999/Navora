@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tripmesh/features/home/places/place_poi.dart';
+import 'package:navora/features/home/places/place_poi.dart';
 
 void main() {
   group('poiKindFromTags', () {

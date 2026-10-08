@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tripmesh/features/home/widgets/trip_vibe_sheet.dart';
-import 'package:tripmesh/features/trips/data/mock_trip_datasource.dart';
-import 'package:tripmesh/features/trips/providers/trip_providers.dart';
-import 'package:tripmesh/shared/models/trip.dart';
+import 'package:navora/features/home/widgets/trip_vibe_sheet.dart';
+import 'package:navora/features/trips/data/mock_trip_datasource.dart';
+import 'package:navora/features/trips/providers/trip_providers.dart';
+import 'package:navora/shared/models/trip.dart';
 
 void main() {
   testWidgets('watchTrips stream emits new trip after createTrip', (t) async {

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
-import 'package:tripmesh/shared/models/trip.dart';
+import 'package:navora/features/home/providers/map_ui_providers.dart';
+import 'package:navora/shared/models/trip.dart';
 
 Trip _trip() => Trip(
       id: 't1',
@@ -38,7 +38,7 @@ void main() {
   test('shareTextFor uses the exact spec format', () {
     expect(
       shareTextFor(_trip()),
-      'Join my TripMesh trip "Pune Getaway" with code ABC123:\n'
+      'Join my Navora trip "Pune Getaway" with code ABC123:\n'
       'navora://join/ABC123',
     );
   });

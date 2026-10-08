@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tripmesh/features/home/places/geocode_repository.dart';
+import 'package:navora/features/home/places/geocode_repository.dart';
 
 void main() {
   group('parseSearchResults', () {

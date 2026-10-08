@@ -52,7 +52,7 @@ out 60;
       final res = await httpClient
           .post(
             Uri.parse(overpassUrl),
-            headers: {'User-Agent': 'TripMesh/1.0 (POI layer)'},
+            headers: {'User-Agent': 'Navora/1.0 (POI layer)'},
             body: {'data': body},
           )
           .timeout(fetchTimeout);
@@ -95,7 +95,7 @@ out 60;
       final res = await httpClient
           .get(
             Uri.parse(nominatimUrl).replace(queryParameters: params),
-            headers: {'User-Agent': 'TripMesh/1.0 (place search)'},
+            headers: {'User-Agent': 'Navora/1.0 (place search)'},
           )
           .timeout(searchTimeout);
       if (res.statusCode != 200) return const [];

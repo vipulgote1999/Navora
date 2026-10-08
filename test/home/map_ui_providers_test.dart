@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tripmesh/core/utils/eta_label.dart';
-import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
+import 'package:navora/core/utils/eta_label.dart';
+import 'package:navora/features/home/providers/map_ui_providers.dart';
 
 void main() {
   test('formatEtaLabel 15km gives straight-line label', () {

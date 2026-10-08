@@ -2,9 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tripmesh/features/home/places/geocode_repository.dart';
-import 'package:tripmesh/features/home/places/place_poi.dart';
-import 'package:tripmesh/shared/models/trip.dart';
+import 'package:navora/features/home/places/geocode_repository.dart';
+import 'package:navora/features/home/places/place_poi.dart';
+import 'package:navora/shared/models/trip.dart';
 
 /// Camera follow behavior for the maps-home view.
 enum FollowMode { none, me, convoy }
@@ -68,7 +68,7 @@ final savedTripIdsProvider = StateProvider<Set<String>>((ref) => <String>{});
 
 /// Exact system-share text for [trip].
 String shareTextFor(Trip trip) =>
-    'Join my TripMesh trip "${trip.name}" with code ${trip.joinCode}:\n'
+    'Join my Navora trip "${trip.name}" with code ${trip.joinCode}:\n'
     'navora://join/${trip.joinCode}';
 
 /// Loads saved ids from prefs into [savedTripIdsProvider]. Silent on failure.
