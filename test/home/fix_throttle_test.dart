@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tripmesh/features/home/tracking/fix_throttle.dart';
+import 'package:navora/features/home/tracking/fix_throttle.dart';
 
 /// Boundary table from the P1 spec (Global Constraints) + reviewer ruling:
 /// accept iff (dist > 15m AND dt > 5s) OR dt > 60s;

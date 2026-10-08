@@ -1,4 +1,4 @@
-/// Throttled GPS-fix gate for TripMesh P1 live tracking.
+/// Throttled GPS-fix gate for Navora P1 live tracking.
 ///
 /// Ruling: accuracy veto → heartbeat (`dt > 60s` accepts regardless of
 /// distance/jitter) → `dist > 15m` AND `dt > 5s` gate with `< 10m` jumps

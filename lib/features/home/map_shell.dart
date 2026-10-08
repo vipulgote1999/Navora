@@ -2,20 +2,23 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tripmesh/features/auth/providers/auth_providers.dart';
-import 'package:tripmesh/features/home/home_screen.dart';
-import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
-import 'package:tripmesh/features/home/tracking/tracking_controller.dart';
-import 'package:tripmesh/features/home/widgets/assist_chips.dart';
-import 'package:tripmesh/features/home/widgets/convoy_map.dart';
-import 'package:tripmesh/features/home/widgets/map_fabs.dart';
-import 'package:tripmesh/features/home/widgets/maps_search_bar.dart';
-import 'package:tripmesh/features/home/widgets/trip_drawer.dart';
-import 'package:tripmesh/features/home/widgets/trip_nav_bar.dart';
-import 'package:tripmesh/features/home/widgets/trip_vibe_sheet.dart';
-import 'package:tripmesh/features/trips/providers/trip_providers.dart';
-import 'package:tripmesh/shared/models/trip.dart';
-import 'package:tripmesh/shared/widgets/trip_card.dart';
+import 'package:navora/features/auth/providers/auth_providers.dart';
+import 'package:navora/features/home/home_screen.dart';
+import 'package:navora/features/home/providers/map_ui_providers.dart';
+import 'package:navora/features/home/tracking/startup_location_permission.dart';
+import 'package:navora/features/home/tracking/tracking_controller.dart';
+import 'package:navora/features/home/widgets/assist_chips.dart';
+import 'package:navora/features/home/widgets/convoy_map.dart';
+import 'package:navora/features/home/widgets/nav_banner.dart';
+import 'package:navora/features/home/widgets/map_fabs.dart';
+import 'package:navora/features/home/widgets/maps_search_bar.dart';
+import 'package:navora/features/home/widgets/trip_drawer.dart';
+import 'package:navora/features/home/widgets/trip_nav_bar.dart';
+import 'package:navora/features/home/widgets/trip_vibe_sheet.dart';
+import 'package:navora/features/navigation/route_providers.dart';
+import 'package:navora/features/trips/providers/trip_providers.dart';
+import 'package:navora/shared/models/trip.dart';
+import 'package:navora/shared/widgets/trip_card.dart';
 
 /// Maps-home shell: drawer + bottom nav over a [ConvoyMap] stack.
 ///
@@ -47,6 +50,12 @@ class _MapShellState extends ConsumerState<MapShell>
     _syncTracking();
     // One-shot hydrate of saved trip ids; failures stay in-memory only.
     unawaited(loadSavedTripIds(ref));
+    // Startup location prompt: once per installation. Post-frame so the
+    // system dialog opens over the first rendered map frame; on grant the
+    // silent auto-start below picks up tracking immediately.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_requestStartupPermission());
+    });
   }
 
   @override
@@ -57,7 +66,9 @@ class _MapShellState extends ConsumerState<MapShell>
   /// Tracks only on Explore (index 0) while resumed; otherwise the stream
   /// halts (battery). Auto-start is silent: `checkPermission` only, no
   /// prompt, no SnackBar — a silent `false` is ignored and retried on the
-  /// next lifecycle/nav event. Explicit permission UX lives in [MapFabs].
+  /// next lifecycle/nav event. Explicit permission UX lives in [MapFabs];
+  /// the one-time startup system prompt lives in
+  /// [_requestStartupPermission] (once per installation).
   Future<void> _syncTracking({bool? resumed}) async {
     final isResumed =
         resumed ??
@@ -72,6 +83,17 @@ class _MapShellState extends ConsumerState<MapShell>
     await _tracker.start(ref);
   }
 
+  /// Once-per-installation startup prompt. Shows the OS location dialog on
+  /// the very first launch only ([ensureStartupLocationPermission] guards
+  /// with a persisted flag); afterwards starts tracking when granted.
+  Future<void> _requestStartupPermission() async {
+    final prompted = await ensureStartupLocationPermission();
+    if (!mounted) return;
+    // First launch (prompt attempted): re-sync — a grant enables tracking
+    // right away via the silent check-only start.
+    if (prompted) await _syncTracking();
+  }
+
   @override
   void dispose() {
     _navSub?.close();
@@ -84,6 +106,9 @@ class _MapShellState extends ConsumerState<MapShell>
   @override
   Widget build(BuildContext context) {
     final navIndex = ref.watch(navIndexProvider);
+    // Maps-style nav mode: the maneuver banner replaces search + chips
+    // while guiding (search returns on arrival/stop).
+    final navigating = ref.watch(navigatingProvider);
 
     return Scaffold(
       drawer: const TripDrawer(),
@@ -95,16 +120,21 @@ class _MapShellState extends ConsumerState<MapShell>
             SafeArea(
               child: Column(
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                    child: MapsSearchBar(
-                      onMenuTap: () =>
-                          Scaffold.of(scaffoldContext).openDrawer(),
+                  if (navigating) ...[
+                    const SizedBox(height: 8),
+                    const NavHeaderBanner(),
+                  ] else ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: MapsSearchBar(
+                        onMenuTap: () =>
+                            Scaffold.of(scaffoldContext).openDrawer(),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  const _SearchResultsDropdown(),
-                  const AssistChips(),
+                    const SizedBox(height: 8),
+                    const _SearchResultsDropdown(),
+                    const AssistChips(),
+                  ],
                   if (navIndex == 1) const Expanded(child: YouTripsOverlay()),
                   if (navIndex == 2) const Expanded(child: ContributeOverlay()),
                 ],
