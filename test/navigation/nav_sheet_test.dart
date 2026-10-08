@@ -358,6 +358,76 @@ void main() {
         expect(find.text('Turn right onto MG Road'), findsNothing);
         expect(find.textContaining('In '), findsNothing);
       });
+
+      TripRoute laneRoute() => const TripRoute(
+            points: [
+              LatLng(18.6545, 73.9412),
+              LatLng(18.6580, 73.9450),
+              LatLng(18.6645, 73.9512),
+            ],
+            distanceM: 2300.5,
+            durationS: 320.0,
+            steps: [
+              RouteStep(
+                instruction: 'Head north',
+                maneuverType: 'depart',
+                modifier: '',
+                distanceM: 400,
+                durationS: 60,
+                location: LatLng(18.6545, 73.9412),
+              ),
+              RouteStep(
+                instruction: 'Turn right onto MG Road',
+                maneuverType: 'turn',
+                modifier: 'right',
+                distanceM: 1500,
+                durationS: 200,
+                location: LatLng(18.6580, 73.9450),
+                ref: 'A2;E35',
+                lanes: [
+                  RouteLane(
+                      indications: ['left', 'straight'], valid: true),
+                  RouteLane(indications: ['straight'], valid: true),
+                  RouteLane(indications: ['right'], valid: false),
+                ],
+              ),
+              RouteStep(
+                instruction: 'Arrive at destination',
+                maneuverType: 'arrive',
+                modifier: '',
+                distanceM: 0,
+                durationS: 0,
+                location: LatLng(18.6645, 73.9512),
+              ),
+            ],
+          );
+
+      testWidgets('shows lane strip and shields for current step',
+          (t) async {
+        await pumpBanner(t, overrides: [
+          routesProvider.overrideWith((ref) => Future.value([laneRoute()])),
+          navigatingProvider.overrideWith((ref) => true),
+          myPositionProvider.overrideWith(
+              (ref) => const LatLng(18.6581, 73.9451)),
+        ]);
+        expect(find.bySemanticsLabel('Lane open'), findsNWidgets(2));
+        expect(find.bySemanticsLabel('Lane closed'), findsOneWidget);
+        expect(find.text('A2'), findsOneWidget);
+        expect(find.text('E35'), findsOneWidget);
+      });
+
+      testWidgets('hides lane strip and shields without data', (t) async {
+        await pumpBanner(t, overrides: [
+          routesProvider.overrideWith(
+              (ref) => Future.value([sampleRoute()])),
+          navigatingProvider.overrideWith((ref) => true),
+          myPositionProvider.overrideWith(
+              (ref) => const LatLng(18.6581, 73.9451)),
+        ]);
+        expect(find.bySemanticsLabel('Lane open'), findsNothing);
+        expect(find.bySemanticsLabel('Lane closed'), findsNothing);
+        expect(find.bySemanticsLabel('Road shields'), findsNothing);
+      });
     });
   });
 }

@@ -90,20 +90,36 @@ class _NavHeaderBannerState extends ConsumerState<NavHeaderBanner> {
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: Text(
-                          step.instruction,
-                          maxLines: _expanded ? 4 : 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 19,
-                            fontWeight: FontWeight.bold,
-                            height: 1.2,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              step.instruction,
+                              maxLines: _expanded ? 4 : 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 19,
+                                fontWeight: FontWeight.bold,
+                                height: 1.2,
+                              ),
+                            ),
+                            if (step.ref.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: _ShieldRow(ref: step.ref),
+                              ),
+                          ],
                         ),
                       ),
                     ],
                   ),
+                  if (step.lanes.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: _LaneStrip(lanes: step.lanes),
+                    ),
                   if (_expanded)
                     for (final next in upcoming)
                       Padding(
@@ -163,6 +179,105 @@ class _NavHeaderBannerState extends ConsumerState<NavHeaderBanner> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Highway shield chips from an OSRM step `ref` (e.g. `A2;E35`).
+///
+/// Hidden by the caller when `ref` is empty.
+class _ShieldRow extends StatelessWidget {
+  const _ShieldRow({required this.ref});
+
+  final String ref;
+
+  @override
+  Widget build(BuildContext context) {
+    final shields = ref
+        .split(';')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList(growable: false);
+    if (shields.isEmpty) return const SizedBox.shrink();
+    return Semantics(
+      label: 'Road shields',
+      container: true,
+      child: Wrap(
+        spacing: 6,
+        children: [
+          for (final shield in shields)
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.white.withAlpha(36),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.white.withAlpha(120)),
+              ),
+              child: Text(
+                shield,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Lane-guidance arrow strip for the current maneuver.
+///
+/// One arrow per lane (first indication); valid lanes full white,
+/// invalid dimmed. `none` (unmarked) lanes render nothing. Hidden by
+/// the caller when the dataset carries no lane data.
+class _LaneStrip extends StatelessWidget {
+  const _LaneStrip({required this.lanes});
+
+  final List<RouteLane> lanes;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Lane guidance',
+      container: true,
+      explicitChildNodes: true,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.black.withAlpha(36),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            for (final lane in lanes)
+              Builder(
+                builder: (context) {
+                  final icon = lane.indications.isEmpty
+                      ? null
+                      : laneIcon(lane.indications.first);
+                  if (icon == null) return const SizedBox.shrink();
+                  return Semantics(
+                    label: lane.valid ? 'Lane open' : 'Lane closed',
+                    button: false,
+                    child: Icon(
+                      icon,
+                      color: lane.valid
+                          ? Colors.white
+                          : Colors.white.withAlpha(100),
+                      size: 30,
+                    ),
+                  );
+                },
+              ),
+          ],
         ),
       ),
     );
