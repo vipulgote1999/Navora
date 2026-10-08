@@ -76,15 +76,27 @@ void main() {
     test('Member fromMap/toMap roundtrip', () {
       const member = Member(
         uid: 'uid-1',
+        displayName: 'Abhi',
         role: MemberRole.host,
         vehicleType: 'Car',
         vehicleLabel: 'Red SUV',
       );
       final restored = Member.fromMap(member.toMap());
       expect(restored.uid, member.uid);
+      expect(restored.displayName, 'Abhi');
       expect(restored.role, member.role);
       expect(restored.vehicleType, member.vehicleType);
       expect(restored.vehicleLabel, member.vehicleLabel);
+    });
+
+    test('Member displayName defaults empty when absent', () {
+      final restored = Member.fromMap(const {
+        'uid': 'uid-2',
+        'role': 'member',
+        'vehicleType': 'Bike',
+        'vehicleLabel': '',
+      });
+      expect(restored.displayName, '');
     });
   });
 
