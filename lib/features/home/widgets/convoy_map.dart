@@ -10,6 +10,7 @@ import 'package:navora/features/home/places/places_repository.dart';
 import 'package:navora/features/home/providers/map_ui_providers.dart';
 import 'package:navora/features/home/tracking/location_permission.dart';
 import 'package:navora/features/navigation/drive_camera.dart';
+import 'package:navora/features/navigation/route_models.dart';
 import 'package:navora/features/navigation/route_providers.dart';
 import 'package:navora/features/trips/providers/trip_providers.dart';
 import 'package:navora/shared/models/live_position.dart';
@@ -69,10 +70,16 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
   final int _styleKey = 0;
 
   /// Annotation handles by stable key (`dest`, `m-<uid>`, `me-bg`,
-  /// `me-arrow`, `poi-<i>`, `search`).
+  /// `me-arrow`, `me-acc`, `poi-<i>`, `search`).
   final Map<String, ml.Symbol> _syms = {};
   final Map<String, ml.Circle> _circles = {};
   final Map<String, Map<String, String>> _tapActions = {};
+
+  /// Route line handles. Rebuilt only when the route signature changes
+  /// ([_linesKey]) — never per frame.
+  final List<ml.Line> _altLines = [];
+  String _linesKey = '';
+  bool _esriAdded = false;
 
   /// Smoothed camera heading + last sent target (throttle state).
   double _smooth = 0;
@@ -117,7 +124,31 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
       _styleLoaded = true;
       _styleFailed = false;
     });
+    unawaited(_addSatelliteOverlay());
     unawaited(_syncSymbols());
+  }
+
+  /// Esri World Imagery overlay for satellite style (hybrid look).
+  ///
+  /// No-op unless satellite is active. Runs after every style load
+  /// because a style reset wipes sources. Never throws.
+  Future<void> _addSatelliteOverlay() async {
+    final c = _ml;
+    if (c == null) return;
+    if (ref.read(mapStyleProvider) != MapStyle.satellite) return;
+    if (_esriAdded) return;
+    try {
+      // MapLibre substitutes {x}/{y}/{z} by name, so Esri's z/y/x
+      // order in the template is honored as-is.
+      await c.addSource(
+        'esri',
+        ml.RasterSourceProperties(tiles: [esriRasterTemplate]),
+      );
+      await c.addRasterLayer('esri', 'esri-layer', ml.RasterLayerProperties());
+      _esriAdded = true;
+    } catch (_) {
+      // Offline / source exists: labels-only map still works.
+    }
   }
 
   void _retryStyle() {
@@ -340,6 +371,25 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
           ),
           const {},
         );
+        // GPS accuracy halo, sized from meters-per-pixel.
+        keep.add('me-acc');
+        final accuracyM = ref.read(myAccuracyMProvider);
+        double radius = 24;
+        try {
+          final mpp = await c.getMetersPerPixelAtLatitude(me.latitude);
+          radius =
+              ((accuracyM ?? 40) / mpp).clamp(8, 60).toDouble();
+        } catch (_) {}
+        await _upsertCircle(
+          c,
+          'me-acc',
+          ml.CircleOptions(
+            geometry: _mlLatLng(me),
+            circleRadius: radius,
+            circleColor: '#4285F4',
+            circleOpacity: 0.25,
+          ),
+        );
       }
       // POI pins.
       for (var i = 0; i < pois.length; i++) {
@@ -392,8 +442,63 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
           } catch (_) {}
         }
       }
+      await _syncLines();
     } catch (_) {
       // Style torn down mid-sync (e.g. style switch): next sync repairs.
+    }
+  }
+
+  /// Reconciles route polylines as MapLibre lines.
+  ///
+  /// Selected route in Google blue on top, alternates gray beneath —
+  /// Maps-style. Rebuilds only when the route signature changes; the
+  /// legacy `activeRouteProvider` stack draws the same blue line. No-op
+  /// until the style loads.
+  Future<void> _syncLines() async {
+    final c = _ml;
+    if (c == null || !_styleLoaded) return;
+    final routes = ref.read(routesProvider).value ?? const <TripRoute>[];
+    final selected = ref.read(selectedRouteIndexProvider);
+    final sel = routes.isEmpty
+        ? null
+        : routes[selected.clamp(0, routes.length - 1)];
+    final activeRoute = ref.read(activeRouteProvider);
+    final key =
+        '${routes.length}:$selected:${sel?.points.length ?? 0}:${activeRoute?.points.length ?? 0}';
+    if (key == _linesKey) return;
+    _linesKey = key;
+    try {
+      await c.clearLines();
+      _altLines.clear();
+      for (final r in routes) {
+        if (r.points.length < 2 || r == sel) continue;
+        _altLines.add(await c.addLine(
+          ml.LineOptions(
+            geometry: [for (final p in r.points) _mlLatLng(p)],
+            lineColor: '#9AA0A6',
+            lineWidth: 4,
+            lineOpacity: 0.8,
+          ),
+        ));
+      }
+      final List<LatLng>? mainPoints = sel?.points ??
+          ((activeRoute?.points.length ?? 0) >= 2
+              ? activeRoute!.points
+              : null);
+      if (mainPoints != null && mainPoints.length >= 2) {
+        final selLine = await c.addLine(
+          ml.LineOptions(
+            geometry: [for (final p in mainPoints) _mlLatLng(p)],
+            lineColor: '#4285F4',
+            lineWidth: 5,
+          ),
+        );
+        _altLines.add(selLine);
+      }
+    } catch (_) {
+      // Style torn down mid-sync: mark stale so the next style load
+      // rebuilds (handles are reset there).
+      _linesKey = '$key-stale';
     }
   }
 
@@ -517,6 +622,14 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
     ref.listen<MapStyle>(mapStyleProvider, (_, next) {
       final c = _ml;
       if (c == null) return;
+      // A style reset wipes native annotations: drop handles so the
+      // post-load sync rebuilds everything (lines, pins, overlay).
+      _syms.clear();
+      _circles.clear();
+      _tapActions.clear();
+      _altLines.clear();
+      _linesKey = '';
+      _esriAdded = false;
       setState(() {
         _styleLoaded = false;
         _styleFailed = false;
