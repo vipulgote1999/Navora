@@ -71,6 +71,14 @@ final mapNativeProvider = StateProvider<bool>((ref) => true);
 /// camera for zoom-by-speed. Displayed by the speed badge (Task 6).
 final mySpeedMpsProvider = StateProvider<double?>((ref) => null);
 
+/// Voice guidance mute flag. Toggled by the drive control stack; the
+/// (future) voice engine reads it. Defaults to unmuted.
+final mapMutedProvider = StateProvider<bool>((ref) => false);
+
+/// Compass-reset nonce. Incremented by the drive control stack; [ConvoyMap]
+/// listens and animates bearing back to north without leaving follow mode.
+final compassResetNonceProvider = StateProvider<int>((ref) => 0);
+
 /// Default map center (Wagholi, Pune) — shared fallback for map + sheet.
 const defaultMapCenterLat = 18.6545;
 const defaultMapCenterLng = 73.9412;

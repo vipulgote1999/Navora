@@ -188,9 +188,16 @@ class _MapShellState extends ConsumerState<MapShell>
             // In nav mode the sheet is taller (ETA), so lift FABs.
             Positioned(
               right: 12,
-              bottom: navigating ? 300 : 180,
+              bottom: navigating ? 320 : 180,
               child: const MapFabs(),
             ),
+            // Google Maps: speed pill bottom-start while guiding.
+            if (navigating)
+              const Positioned(
+                left: 12,
+                bottom: 320,
+                child: NavSpeedPill(),
+              ),
             // Google Maps: no layer switcher while guiding.
             if (!navigating)
               const Positioned(

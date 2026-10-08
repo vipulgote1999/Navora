@@ -619,8 +619,20 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
           _driveTo(LatLng(next.lat, next.lng), 15, 0, 0));
       unawaited(_syncSymbols());
     });
-    ref.listen<MapStyle>(mapStyleProvider, (_, next) {
+    // Compass reset from the drive stack: bearing back to north without
+    // leaving follow mode (ruling T6-compass).
+    ref.listen<int>(compassResetNonceProvider, (_, _) {
       final c = _ml;
+      final center = _camCenter;
+      if (c == null || center == null) return;
+      unawaited(_driveTo(
+        _toLatLng(center),
+        _camZoom,
+        0,
+        ref.read(navigatingProvider) ? _driveTilt : 0,
+      ));
+    });
+    ref.listen<MapStyle>(mapStyleProvider, (_, next) {      final c = _ml;
       if (c == null) return;
       // A style reset wipes native annotations: drop handles so the
       // post-load sync rebuilds everything (lines, pins, overlay).
