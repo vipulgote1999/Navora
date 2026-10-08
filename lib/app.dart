@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:tripmesh/features/home/home_screen.dart';
+import 'package:navora/features/home/home_screen.dart';
 
-/// TripMesh root widget. Material3, dark-first (`themeMode: ThemeMode.dark`).
-class TripMeshApp extends StatelessWidget {
-  const TripMeshApp({super.key});
+/// Navora root widget. Material3, dark-first (`themeMode: ThemeMode.dark`).
+class NavoraApp extends StatelessWidget {
+  const NavoraApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'TripMesh',
+      title: 'Navora',
       themeMode: ThemeMode.dark,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
