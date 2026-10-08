@@ -81,8 +81,8 @@ class _NavHeaderBannerState extends ConsumerState<NavHeaderBanner> {
                               textAlign: TextAlign.center,
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ],
@@ -112,6 +112,46 @@ class _NavHeaderBannerState extends ConsumerState<NavHeaderBanner> {
                               ),
                           ],
                         ),
+                      ),
+                      const SizedBox(width: 4),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Tooltip(
+                            message: 'Voice guidance coming soon',
+                            child: const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: Icon(
+                                Icons.mic,
+                                color: Colors.white70,
+                                size: 22,
+                              ),
+                            ),
+                          ),
+                          Semantics(
+                            label: 'End navigation',
+                            button: true,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(20),
+                              onTap: () {
+                                ref
+                                    .read(navigatingProvider.notifier)
+                                    .state = false;
+                                ref
+                                    .read(mapFollowModeProvider.notifier)
+                                    .state = FollowMode.none;
+                              },
+                              child: const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: Icon(
+                                  Icons.close,
+                                  color: Colors.white,
+                                  size: 22,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

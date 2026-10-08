@@ -50,6 +50,10 @@ class FakeRoutingRepository extends RoutingRepository {
   int calls = 0;
   final TripRoute route;
 
+  /// When true, the first [fetchRoutes] call returns [] (simulated
+  /// failure), later calls succeed. Drives the retry-refetch test.
+  bool failFirst = false;
+
   FakeRoutingRepository(this.route);
 
   @override
@@ -60,6 +64,7 @@ class FakeRoutingRepository extends RoutingRepository {
     http.Client? client,
   }) async {
     calls++;
+    if (failFirst && calls == 1) return const [];
     return [route];
   }
 
@@ -186,6 +191,28 @@ void main() {
       expect(find.text('Retry'), findsOneWidget);
       await t.tap(find.text('Retry'));
       await t.pump();
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('retry refetches routes from the network', (t) async {
+      final fake = FakeRoutingRepository(sampleRoute())..failFirst = true;
+      await pumpSheet(t, overrides: [
+        routingRepositoryProvider.overrideWithValue(fake),
+        routeOriginProvider.overrideWith(
+            (ref) => const LatLng(18.6545, 73.9412)),
+        routeDestinationProvider.overrideWith(
+            (ref) => const LatLng(18.6645, 73.9512)),
+      ]);
+      expect(
+        find.text('No route found — check connection'),
+        findsOneWidget,
+      );
+      expect(fake.calls, 1);
+      await t.tap(find.text('Retry'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 100));
+      expect(fake.calls, 2);
+      expect(find.text('Turn right onto MG Road'), findsOneWidget);
       expect(t.takeException(), isNull);
     });
 
@@ -346,6 +373,26 @@ void main() {
         ]);
         expect(find.text('Turn right onto MG Road'), findsOneWidget);
         expect(find.textContaining('In '), findsOneWidget);
+      });
+
+      testWidgets('end button exits navigation', (t) async {
+        await pumpBanner(t, overrides: [
+          routesProvider.overrideWith(
+              (ref) => Future.value([sampleRoute()])),
+          navigatingProvider.overrideWith((ref) => true),
+          mapFollowModeProvider
+              .overrideWith((ref) => FollowMode.me),
+          myPositionProvider.overrideWith(
+              (ref) => const LatLng(18.6581, 73.9451)),
+        ]);
+        expect(find.text('Turn right onto MG Road'), findsOneWidget);
+        await t.tap(find.bySemanticsLabel('End navigation'));
+        await t.pump();
+        final container =
+            ProviderScope.containerOf(t.element(find.byType(NavHeaderBanner)));
+        expect(container.read(navigatingProvider), isFalse);
+        expect(container.read(mapFollowModeProvider), FollowMode.none);
+        expect(find.text('Turn right onto MG Road'), findsNothing);
       });
 
       testWidgets('hidden when not navigating', (t) async {

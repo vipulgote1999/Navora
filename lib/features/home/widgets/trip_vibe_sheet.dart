@@ -636,7 +636,11 @@ class _RouteSection extends ConsumerWidget {
                   style: TextButton.styleFrom(
                     minimumSize: const Size(48, 48),
                   ),
-                  onPressed: () => ref.invalidate(routeProvider),
+                  // Invalidate the list provider (cascades to the
+                  // selected-route provider): invalidating only
+                  // routeProvider re-reads the cached [] without a
+                  // network fetch, so Retry would silently do nothing.
+                  onPressed: () => ref.invalidate(routesProvider),
                   child: const Text('Retry'),
                 ),
               ],

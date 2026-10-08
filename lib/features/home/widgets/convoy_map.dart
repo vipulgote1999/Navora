@@ -352,9 +352,9 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
           'me-bg',
           ml.CircleOptions(
             geometry: _mlLatLng(me),
-            circleRadius: 9,
+            circleRadius: 14,
             circleColor: '#4285F4',
-            circleStrokeWidth: 2,
+            circleStrokeWidth: 3,
             circleStrokeColor: '#FFFFFF',
           ),
         );
@@ -365,7 +365,7 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
           ml.SymbolOptions(
             geometry: _mlLatLng(me),
             iconImage: 'triangle',
-            iconSize: 1.2,
+            iconSize: 1.6,
             iconColor: '#FFFFFF',
             iconRotate: _smooth,
           ),
@@ -486,14 +486,22 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
               ? activeRoute!.points
               : null);
       if (mainPoints != null && mainPoints.length >= 2) {
-        final selLine = await c.addLine(
+        final geometry = [for (final p in mainPoints) _mlLatLng(p)];
+        // White casing under the blue line (Google Maps look).
+        _altLines.add(await c.addLine(
           ml.LineOptions(
-            geometry: [for (final p in mainPoints) _mlLatLng(p)],
+            geometry: geometry,
+            lineColor: '#FFFFFF',
+            lineWidth: 8,
+          ),
+        ));
+        _altLines.add(await c.addLine(
+          ml.LineOptions(
+            geometry: geometry,
             lineColor: '#4285F4',
             lineWidth: 5,
           ),
-        );
-        _altLines.add(selLine);
+        ));
       }
     } catch (_) {
       // Style torn down mid-sync: mark stale so the next style load

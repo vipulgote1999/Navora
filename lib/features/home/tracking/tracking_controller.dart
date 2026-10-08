@@ -88,6 +88,10 @@ class TrackingController {
         pos.accuracy > 0 ? pos.accuracy : null;
     ref.read(myHeadingDegProvider.notifier).state =
         pos.speed > 1 ? pos.heading : null;
+    // Same rule for speed: the drive camera holds zoom and the speed
+    // badge hides while stopped (Google Maps behaviour).
+    ref.read(mySpeedMpsProvider.notifier).state =
+        pos.speed > 1 ? pos.speed : null;
   }
 
   Future<void> stop() async {
