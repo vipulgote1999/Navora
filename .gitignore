@@ -46,3 +46,6 @@ app.*.map.json
 
 # Local env with real keys. Never commit secrets; commit only .env.example.
 .env
+
+# Git worktrees (isolated workspaces)
+.worktrees/
