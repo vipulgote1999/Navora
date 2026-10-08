@@ -5,18 +5,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' hide Path;
+import 'package:tripmesh/features/home/map/map_tiles.dart';
 import 'package:tripmesh/features/home/places/geocode_repository.dart';
 import 'package:tripmesh/features/home/places/place_poi.dart';
 import 'package:tripmesh/features/home/places/places_repository.dart';
 import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
+import 'package:tripmesh/features/navigation/route_providers.dart';
 import 'package:tripmesh/features/trips/providers/trip_providers.dart';
 import 'package:tripmesh/shared/models/live_position.dart';
 import 'package:tripmesh/shared/models/trip.dart';
-
-/// OSM standard tiles for both themes (keyless). CARTO dark_all now
-/// requires an API key, so dark mode reuses OSM to avoid the watermark.
-const lightTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-const darkTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 /// Shared convoy map center (Wagholi, Pune).
 const convoyMapCenter = LatLng(defaultMapCenterLat, defaultMapCenterLng);
@@ -297,12 +294,13 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
     final headingDeg = ref.watch(myHeadingDegProvider);
     final pois = ref.watch(nearbyPoisProvider);
     final searchFocus = ref.watch(searchFocusProvider);
+    final mapLayer = mapTileLayers[ref.watch(mapStyleProvider)]!;
+    final route = ref.watch(activeRouteProvider);
 
     void select() =>
         ref.read(selectedTripIdProvider.notifier).state = activeId;
 
     final colorScheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final map = FlutterMap(
       mapController: _mapController,
       options: MapOptions(
@@ -313,7 +311,7 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
       children: [
         TileLayer(
           key: ValueKey<int>(_tileRetryKey),
-          urlTemplate: isDark ? darkTileUrl : lightTileUrl,
+          urlTemplate: mapLayer.urlTemplate,
           userAgentPackageName: 'tripmesh',
           errorTileCallback: (tile, error, stack) {},
           tileBuilder: (context, tileWidget, tile) {
@@ -333,6 +331,16 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
             );
           },
         ),
+        if (route != null)
+          PolylineLayer(
+            polylines: [
+              Polyline(
+                points: route.points,
+                color: colorScheme.primary,
+                strokeWidth: 5,
+              ),
+            ],
+          ),
         if (me != null)
           CircleLayer(
             circles: [
@@ -470,9 +478,9 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
               ),
           ],
         ),
-        const RichAttributionWidget(
+        RichAttributionWidget(
           attributions: [
-            TextSourceAttribution('OpenStreetMap contributors'),
+            TextSourceAttribution(mapLayer.attribution),
           ],
           // Open on load so attribution is visible (and testable) immediately.
           popupInitialDisplayDuration: Duration(seconds: 5),

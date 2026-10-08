@@ -4,15 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tripmesh/features/auth/providers/auth_providers.dart';
 import 'package:tripmesh/features/home/home_screen.dart';
+import 'package:tripmesh/features/home/map/map_tiles.dart';
 import 'package:tripmesh/features/home/providers/map_ui_providers.dart';
 import 'package:tripmesh/features/home/tracking/tracking_controller.dart';
 import 'package:tripmesh/features/home/widgets/assist_chips.dart';
 import 'package:tripmesh/features/home/widgets/convoy_map.dart';
 import 'package:tripmesh/features/home/widgets/map_fabs.dart';
 import 'package:tripmesh/features/home/widgets/maps_search_bar.dart';
+import 'package:tripmesh/features/home/widgets/nav_banner.dart';
 import 'package:tripmesh/features/home/widgets/trip_drawer.dart';
 import 'package:tripmesh/features/home/widgets/trip_nav_bar.dart';
 import 'package:tripmesh/features/home/widgets/trip_vibe_sheet.dart';
+import 'package:tripmesh/features/navigation/route_providers.dart';
 import 'package:tripmesh/features/trips/providers/trip_providers.dart';
 import 'package:tripmesh/shared/models/trip.dart';
 import 'package:tripmesh/shared/widgets/trip_card.dart';
@@ -104,6 +107,8 @@ class _MapShellState extends ConsumerState<MapShell>
                   ),
                   const SizedBox(height: 8),
                   const _SearchResultsDropdown(),
+                  const NavBanner(),
+                  const _RouteErrorLine(),
                   const AssistChips(),
                   if (navIndex == 1) const Expanded(child: YouTripsOverlay()),
                   if (navIndex == 2) const Expanded(child: ContributeOverlay()),
@@ -114,6 +119,11 @@ class _MapShellState extends ConsumerState<MapShell>
               right: 12,
               bottom: 180,
               child: MapFabs(),
+            ),
+            const Positioned(
+              left: 12,
+              bottom: 180,
+              child: _MapStyleButton(),
             ),
             // Anchored bottom-center: a bare sheet child would align to
             // the top of the Stack and cover the search bar.
@@ -191,6 +201,72 @@ class _SearchResultsDropdown extends ConsumerWidget {
                   },
                 ),
         ),
+      ),
+    );
+  }
+}
+
+/// Inline route-failure line under the nav banner.
+///
+/// Visible only while [routeErrorProvider] is set — a failed re-route must
+/// not silently leave a stale route on screen with no error visible. The
+/// close button dismisses it; [fetchRoute] also clears it when a new fetch
+/// starts.
+class _RouteErrorLine extends ConsumerWidget {
+  const _RouteErrorLine();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final error = ref.watch(routeErrorProvider);
+    if (error == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            children: [
+              Expanded(child: Text(error)),
+              IconButton(
+                icon: const Icon(Icons.close),
+                tooltip: 'Dismiss route error',
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(48, 48),
+                ),
+                onPressed: () {
+                  ref.read(routeErrorProvider.notifier).state = null;
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Base-map style cycler: standard → dark → satellite.
+///
+/// One control with semantics label `Map style`; [ConvoyMap] switches its
+/// tile layer (URL + attribution) off [mapStyleProvider].
+class _MapStyleButton extends ConsumerWidget {
+  const _MapStyleButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final style = ref.watch(mapStyleProvider);
+    return Semantics(
+      label: 'Map style',
+      button: true,
+      child: FloatingActionButton.small(
+        heroTag: 'map-style',
+        tooltip: 'Change map style',
+        onPressed: () {
+          final next =
+              MapStyle.values[(style.index + 1) % MapStyle.values.length];
+          ref.read(mapStyleProvider.notifier).state = next;
+        },
+        child: const Icon(Icons.layers_outlined),
       ),
     );
   }
