@@ -363,7 +363,9 @@ void main() {
       expect(t.takeException(), isNull);
     });
 
-    testWidgets('arrival stops navigation with notice', (t) async {      final dest = const LatLng(18.6645, 73.9512);
+    testWidgets('arrival asks confirmation; End stops with notice',
+        (t) async {
+      final dest = const LatLng(18.6645, 73.9512);
       final fake = FakeRoutingRepository(sampleRoute());
       await pumpSheet(t, overrides: [
         routingRepositoryProvider.overrideWithValue(fake),
@@ -377,8 +379,64 @@ void main() {
       container.read(myPositionProvider.notifier).state = dest;
       await t.pump();
       await t.pump(const Duration(milliseconds: 100));
+      // Confirmation first — navigation stays active until the user ends it.
+      expect(find.text("You've arrived"), findsOneWidget);
+      expect(container.read(navigatingProvider), isTrue);
+      await t.tap(find.text('End navigation'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 100));
       expect(container.read(navigatingProvider), isFalse);
       expect(find.text('Arrived at destination ✓'), findsOneWidget);
+    });
+
+    testWidgets('Keep going dismisses without stopping or re-prompting',
+        (t) async {
+      final dest = const LatLng(18.6645, 73.9512);
+      final fake = FakeRoutingRepository(sampleRoute());
+      await pumpSheet(t, overrides: [
+        routingRepositoryProvider.overrideWithValue(fake),
+        routeOriginProvider.overrideWith(
+            (ref) => const LatLng(18.6545, 73.9412)),
+        routeDestinationProvider.overrideWith((ref) => dest),
+        navigatingProvider.overrideWith((ref) => true),
+      ]);
+      final container =
+          ProviderScope.containerOf(t.element(find.byType(TripVibeSheet)));
+      container.read(myPositionProvider.notifier).state = dest;
+      await t.pump();
+      await t.pumpAndSettle();
+      expect(find.text("You've arrived"), findsOneWidget);
+      await t.tap(find.text('Keep going'));
+      await t.pumpAndSettle();
+      expect(container.read(navigatingProvider), isTrue);
+      expect(find.text("You've arrived"), findsNothing);
+      // Still at the destination: no second prompt.
+      container.read(myPositionProvider.notifier).state =
+          const LatLng(18.6646, 73.9513);
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 100));
+      expect(find.text("You've arrived"), findsNothing);
+      expect(container.read(navigatingProvider), isTrue);
+    });
+
+    testWidgets('reaching only the route end also asks', (t) async {
+      // Destination pin far off-road; fix lands on the route's last point.
+      final fake = FakeRoutingRepository(sampleRoute());
+      await pumpSheet(t, overrides: [
+        routingRepositoryProvider.overrideWithValue(fake),
+        routeOriginProvider.overrideWith(
+            (ref) => const LatLng(18.6545, 73.9412)),
+        routeDestinationProvider.overrideWith(
+            (ref) => const LatLng(18.7000, 74.0000)),
+        navigatingProvider.overrideWith((ref) => true),
+      ]);
+      final container =
+          ProviderScope.containerOf(t.element(find.byType(TripVibeSheet)));
+      container.read(myPositionProvider.notifier).state =
+          const LatLng(18.6645, 73.9512);
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 100));
+      expect(find.text("You've arrived"), findsOneWidget);
     });
 
     testWidgets('deviation refetches once per 10s', (t) async {

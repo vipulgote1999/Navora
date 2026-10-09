@@ -43,6 +43,11 @@ final lastRerouteAtProvider = StateProvider<DateTime?>((ref) => null);
 /// Set by the position listener, cleared on Start/Clear/new endpoints.
 final routeNoticeProvider = StateProvider<String?>((ref) => null);
 
+/// Destination for which arrival was already asked about. Guards the
+/// arrival confirmation so `Keep going` isn't re-prompted on every fix;
+/// any new destination re-arms automatically.
+final arrivalAskedForProvider = StateProvider<LatLng?>((ref) => null);
+
 /// All routes for [routeOriginProvider] → [routeDestinationProvider],
 /// best-first (OSRM `alternatives=true`).
 ///

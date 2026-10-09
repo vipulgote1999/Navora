@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
@@ -429,7 +431,8 @@ String _optionLabel(TripRoute route) {
 /// no-route card with retry; the external-maps fallback lives on the
 /// search card and [MapFabs]. While [navigatingProvider] is true, GPS
 /// fixes drive follow-me (via [mapFollowModeProvider]), auto-reroute on
-/// >50m deviation (max once per 10s), and arrival stop within 25m.
+/// >50m deviation (max once per 10s), and arrival confirmation within 25m
+/// of the destination pin or route end (stops only on user confirmation).
 class _RouteSection extends ConsumerWidget {
   const _RouteSection();
 
@@ -450,17 +453,55 @@ class _RouteSection extends ConsumerWidget {
     final destination = ref.watch(routeDestinationProvider);
     final searchPlace = ref.watch(searchFocusProvider);
 
-    // Deviation → reroute; arrival → stop. Provider writes only.
+    // Deviation → reroute; arrival → confirm-and-stop (provider writes
+    // only, except the arrival dialog which needs a BuildContext).
     ref.listen<LatLng?>(myPositionProvider, (prev, next) {
       if (next == null || !ref.read(navigatingProvider)) return;
       final route = ref.read(routeProvider).value;
       final dest = ref.read(routeDestinationProvider);
       if (route == null || dest == null) return;
-      // Arrival always wins.
-      if (const Distance().as(LengthUnit.Meter, next, dest) <= 25) {
-        ref.read(navigatingProvider.notifier).state = false;
-        ref.read(routeNoticeProvider.notifier).state =
-            'Arrived at destination ✓';
+      // Arrival always wins — but stops only with the user's permission
+      // (Maps-style confirmation). `routeEnd` matters because snapped
+      // routes often end well off the destination pin; without it,
+      // navigation never stops at the destination.
+      if (ref.read(arrivalAskedForProvider) != dest &&
+          hasArrived(
+            me: next,
+            destination: dest,
+            routeEnd:
+                route.points.isEmpty ? null : route.points.last,
+          )) {
+        ref.read(arrivalAskedForProvider.notifier).state = dest;
+        if (context.mounted) {
+          final label = _destinationLabel(
+            dest,
+            ref.read(searchFocusProvider),
+          );
+          unawaited(showDialog<void>(
+            context: context,
+            barrierDismissible: false,
+            builder: (dialogContext) => AlertDialog(
+              title: const Text("You've arrived"),
+              content: Text('End navigation to $label?'),
+              actions: [
+                TextButton(
+                  onPressed: () =>
+                      Navigator.of(dialogContext).pop(),
+                  child: const Text('Keep going'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    ref.read(navigatingProvider.notifier).state = false;
+                    ref.read(routeNoticeProvider.notifier).state =
+                        'Arrived at destination ✓';
+                    Navigator.of(dialogContext).pop();
+                  },
+                  child: const Text('End navigation'),
+                ),
+              ],
+            ),
+          ));
+        }
         return;
       }
       // First real fix after a fallback start: the origin froze as the

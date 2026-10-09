@@ -119,8 +119,14 @@ void main() {
     await DriveSim.driveAlong(t, container, [_lerp(_b, _c, 0.9)]);
     expect(container.read(navigatingProvider), isTrue);
 
-    // On the destination: arrival stops guidance with a notice.
+    // On the destination: arrival asks confirmation, still guiding.
     await DriveSim.driveAlong(t, container, [_c]);
+    expect(find.text("You've arrived"), findsOneWidget);
+    expect(container.read(navigatingProvider), isTrue);
+    // Confirming ends guidance with a notice.
+    await t.tap(find.text('End navigation'));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 100));
     expect(container.read(navigatingProvider), isFalse);
     expect(find.text('Arrived at destination ✓'), findsOneWidget);
     expect(t.takeException(), isNull);

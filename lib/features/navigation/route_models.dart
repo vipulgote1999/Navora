@@ -331,3 +331,27 @@ LatLng routeMidpoint(TripRoute route) {
   if (route.points.isEmpty) return const LatLng(0, 0);
   return route.points[route.points.length ~/ 2];
 }
+
+/// Whether [me] counts as arrived: within [radiusM] of the destination
+/// pin OR of the route's end.
+///
+/// Pure: snapped routes often end well off the destination pin (building
+/// centroid vs nearest road), so the route end alone must trigger
+/// arrival — otherwise navigation never stops at the destination.
+bool hasArrived({
+  required LatLng me,
+  LatLng? destination,
+  LatLng? routeEnd,
+  double radiusM = 25,
+}) {
+  const distance = Distance();
+  if (destination != null &&
+      distance.as(LengthUnit.Meter, me, destination) <= radiusM) {
+    return true;
+  }
+  if (routeEnd != null &&
+      distance.as(LengthUnit.Meter, me, routeEnd) <= radiusM) {
+    return true;
+  }
+  return false;
+}
