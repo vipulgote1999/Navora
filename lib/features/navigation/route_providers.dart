@@ -101,6 +101,9 @@ void clearRoute(WidgetRef ref) {
 void exitNavigation(WidgetRef ref) {
   ref.read(driveSimulatorProvider).stop();
   ref.read(simulatingProvider.notifier).state = false;
+  // Dispose the demo repo (cancels the pacer timer + closes its stream)
+  // before dropping the override so nothing ticks after exit.
+  ref.read(demoRepositoryProvider)?.dispose();
   ref.read(demoRepositoryProvider.notifier).state = null;
   ref.read(selectedTripIdProvider.notifier).state = null;
   clearRoute(ref);

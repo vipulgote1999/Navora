@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:latlong2/latlong.dart';
@@ -19,9 +20,14 @@ const demoTripId = 'demo-trip';
 /// [watchLive] yields `[]` first, then periodic fixes; the stream ends
 /// when the listener cancels (no manual dispose needed).
 class DemoConvoyRepository extends MockTripDataSource {
+  /// Trip id this repository stages (Abhi + Bapu + Me).
   final String demoTripId;
   final List<LatLng> routePoints;
   final Duration tick;
+
+  StreamController<List<LivePosition>>? _controller;
+  Timer? _timer;
+  double _elapsed = 0;
 
   static const _abhi = _Pacer(
       uid: 'abhi', startFraction: 0.35, baseSpeedMps: 14, phase: 0.0);
@@ -127,18 +133,37 @@ class DemoConvoyRepository extends MockTripDataSource {
     return points.last;
   }
 
+  /// Owns its tick timer; cancels it and closes the broadcast stream.
+  /// Safe to call twice. End/X paths call this via [exitNavigation].
   @override
-  Stream<List<LivePosition>> watchLive(String tripId) async* {
+  void dispose() {
+    _timer?.cancel();
+    _timer = null;
+    _controller?.close();
+    _controller = null;
+  }
+
+  @override
+  Stream<List<LivePosition>> watchLive(String tripId) {
     if (tripId != demoTripId || routePoints.length < 2) {
-      yield* super.watchLive(tripId);
-      return;
+      return super.watchLive(tripId);
     }
-    yield const <LivePosition>[];
-    var elapsed = 0.0;
-    await for (final _ in Stream.periodic(tick)) {
-      elapsed += tick.inMilliseconds / 1000.0;
-      yield positionsAt(elapsed);
+    final controller = _controller ??= StreamController<List<
+        LivePosition>>.broadcast();
+    if (_timer == null) {
+      controller.add(const <LivePosition>[]);
+      _elapsed = 0;
+      _timer = Timer.periodic(tick, (_) {
+        if (controller.isClosed) {
+          _timer?.cancel();
+          _timer = null;
+          return;
+        }
+        _elapsed += tick.inMilliseconds / 1000.0;
+        controller.add(positionsAt(_elapsed));
+      });
     }
+    return controller.stream;
   }
 }
 

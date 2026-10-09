@@ -88,3 +88,29 @@ double bearingBetween(LatLng a, LatLng b) {
       math.sin(lat1) * math.cos(lat2) * math.cos(dLng);
   return (math.atan2(y, x) * 180 / math.pi + 360) % 360;
 }
+
+/// Meters of [points] remaining from the vertex nearest [pos].
+///
+/// Powers per-member remaining chips. Zero for degenerate routes;
+/// nearest-vertex approximation (cheap enough per tick).
+double remainingRouteM(List<LatLng> points, LatLng pos) {
+  if (points.length < 2) return 0;
+  const distance = Distance();
+  var best = 0;
+  var bestM = distance.as(LengthUnit.Meter, pos, points[0]);
+  for (var i = 1; i < points.length; i++) {
+    final m = distance.as(LengthUnit.Meter, pos, points[i]);
+    if (m < bestM) {
+      bestM = m;
+      best = i;
+    }
+  }
+  var done = 0.0;
+  var total = 0.0;
+  for (var i = 1; i < points.length; i++) {
+    final seg = distance.as(LengthUnit.Meter, points[i - 1], points[i]);
+    total += seg;
+    if (i <= best) done += seg;
+  }
+  return (total - done).clamp(0.0, total);
+}

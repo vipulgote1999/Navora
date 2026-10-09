@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:navora/features/home/providers/map_ui_providers.dart';
 import 'package:navora/features/home/widgets/map_fabs.dart';
 import 'package:navora/features/home/places/geocode_repository.dart';
+import 'package:navora/features/navigation/drive_camera.dart';
 import 'package:navora/features/navigation/route_icons.dart';
 import 'package:navora/features/navigation/route_models.dart';
 import 'package:navora/features/navigation/route_providers.dart';
@@ -691,6 +692,8 @@ class _RouteSection extends ConsumerWidget {
                 ],
               ),
             ),
+            if (ref.watch(demoRepositoryProvider) != null)
+              const _PacerChips(),
           ] else if (route != null) ...[
             const SizedBox(height: 8),
             SizedBox(
@@ -774,6 +777,70 @@ class _RouteSection extends ConsumerWidget {
                 ),
               ),
         ],
+      ),
+    );
+  }
+}
+
+/// Per-member remaining chips for the demo convoy (`Abhi · 2.1 km · 4 min`).
+///
+/// Shown only while a demo runs with live pacer data; hidden for empty
+/// or stale data. Remaining distance comes from route progress
+/// ([remainingRouteM]); minutes divide by the pacer's own speed.
+class _PacerChips extends ConsumerWidget {
+  const _PacerChips();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final demo = ref.watch(demoRepositoryProvider);
+    if (demo == null) return const SizedBox.shrink();
+    final route = ref.watch(routeProvider).value;
+    if (route == null || route.points.length < 2) {
+      return const SizedBox.shrink();
+    }
+    final live = ref.watch(livePositionsProvider(demoTripId)).value ??
+        const <LivePosition>[];
+    if (live.isEmpty) return const SizedBox.shrink();
+    final members = ref.watch(tripMembersProvider(demoTripId));
+    final names = {for (final m in members) m.uid: m.displayName};
+    final now = DateTime.now();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Semantics(
+        label: 'Convoy remaining',
+        container: true,
+        explicitChildNodes: true,
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final p in live)
+              if (!(p.isStale(now)))
+                Builder(
+                  builder: (context) {
+                    final name = (names[p.uid] ?? p.uid).trim();
+                    final label = name.isEmpty ? p.uid : name;
+                    final String text;
+                    if (p.status == 'arrived') {
+                      text = '$label · arrived';
+                    } else {
+                      final remaining = remainingRouteM(
+                        route.points,
+                        LatLng(p.lat, p.lng),
+                      );
+                      final mins = (((remaining /
+                                          (p.speed > 0 ? p.speed : 1)) /
+                                      60)
+                                  .round())
+                              .clamp(1, 1 << 30);
+                      text =
+                          '$label · ${(remaining / 1000).toStringAsFixed(1)} km · $mins min';
+                    }
+                    return Chip(label: Text(text));
+                  },
+                ),
+          ],
+        ),
       ),
     );
   }

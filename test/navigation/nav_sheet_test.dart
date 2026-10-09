@@ -10,6 +10,7 @@ import 'package:navora/features/navigation/route_models.dart';
 import 'package:navora/features/navigation/route_providers.dart';
 import 'package:navora/features/navigation/routing_repository.dart';
 import 'package:navora/features/trips/data/demo_bhosari_route.dart';
+import 'package:navora/features/trips/data/demo_convoy_repository.dart';
 import 'package:navora/features/trips/providers/trip_providers.dart';
 
 TripRoute sampleRoute() => const TripRoute(
@@ -101,6 +102,25 @@ Future<void> pumpSheet(
   );
   await t.pump();
   await t.pump(const Duration(milliseconds: 100));
+}
+
+final _liveSubs = <ProviderSubscription<dynamic>>[];
+
+/// Keeps a live-provider subscription open (a dropped bare read never
+/// delivers under fake async) for tests asserting on streamed values.
+void containerListenLive(WidgetTester t) {
+  final container =
+      ProviderScope.containerOf(t.element(find.byType(TripVibeSheet)));
+  _liveSubs.add(container.listen(livePositionsProvider('demo-trip'), (_, _) {}));
+}
+
+/// Closes subscriptions opened by [containerListenLive] so periodic
+/// streams cancel before teardown (else "Timer is still pending").
+void closeLiveListen() {
+  for (final sub in _liveSubs) {
+    sub.close();
+  }
+  _liveSubs.clear();
 }
 
 void main() {
@@ -242,7 +262,7 @@ void main() {
       // Pacers flow through the live provider for the demo trip.
       // Keep a live subscription (a dropped bare read never delivers),
       // advance past the 1s pacer tick, then read synchronously.
-      container.listen(livePositionsProvider('demo-trip'), (_, _) {});
+      containerListenLive(t);
       await t.pump();
       await t.pump(const Duration(seconds: 2));
       final live =
@@ -252,6 +272,8 @@ void main() {
       // End exits cleanly with no residue.
       await t.tap(find.text('End'));
       await t.pump();
+      closeLiveListen();
+      await t.pump();
       expect(container.read(navigatingProvider), isFalse);
       expect(container.read(demoRepositoryProvider), isNull);
       // Flush the demo-start SnackBar timer so teardown is clean.
@@ -259,8 +281,35 @@ void main() {
       expect(t.takeException(), isNull);
     });
 
-    testWidgets('first fix re-anchors fallback origin', (t) async {
-      const fallback =
+    testWidgets('demo shows per-member remaining chips', (t) async {
+      final fake = FakeRoutingRepository(sampleRoute());
+      final demo = DemoConvoyRepository(
+        tripId: demoTripId,
+        routePoints: sampleRoute().points,
+      );
+      await pumpSheet(t, overrides: [
+        routingRepositoryProvider.overrideWithValue(fake),
+        demoRepositoryProvider.overrideWith((ref) => demo),
+        routeOriginProvider.overrideWith(
+            (ref) => const LatLng(18.6545, 73.9412)),
+        routeDestinationProvider.overrideWith(
+            (ref) => const LatLng(18.6645, 73.9512)),
+        navigatingProvider.overrideWith((ref) => true),
+      ]);
+      containerListenLive(t);
+      await t.pump();
+      await t.pump(const Duration(seconds: 2));
+      expect(find.textContaining('Abhi ·'), findsOneWidget);
+      expect(find.textContaining('Bapu ·'), findsOneWidget);
+      // Close the kept subscription, then dispose the demo repo (the
+      // test owns the instance) so the pacer timer stops before teardown.
+      closeLiveListen();
+      demo.dispose();
+      await t.pump();
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('first fix re-anchors fallback origin', (t) async {      const fallback =
           LatLng(defaultMapCenterLat, defaultMapCenterLng);
       final fix = LatLng(fallback.latitude + 0.0004, fallback.longitude);
       final fake = FakeRoutingRepository(sampleRoute());

@@ -26,8 +26,26 @@ void main() {
     });
   });
 
-  group('courseMadeGood', () {
-    test('null without baseline', () {
+  group('remainingRouteM', () {
+    const a = LatLng(18.6545, 73.9412);
+    const b = LatLng(18.6580, 73.9450);
+    const c = LatLng(18.6645, 73.9512);
+    const pts = [a, b, c];
+
+    test('full route remaining at start, zero at end', () {
+      final total = const Distance().as(LengthUnit.Meter, a, b) +
+          const Distance().as(LengthUnit.Meter, b, c);
+      expect(remainingRouteM(pts, a), closeTo(total, 1));
+      expect(remainingRouteM(pts, c), 0);
+    });
+
+    test('short route or off-route degrades gracefully', () {
+      expect(remainingRouteM(const [a], a), 0);
+      expect(remainingRouteM(const [], a), 0);
+    });
+  });
+
+  group('courseMadeGood', () {    test('null without baseline', () {
       expect(courseMadeGood(null, const LatLng(18.0, 73.0)), isNull);
     });
 

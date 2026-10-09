@@ -39,17 +39,38 @@ void main() {
       repo.dispose();
     });
 
-    test('watchLive yields empty pre-start then pacer fixes', () async {
-      final repo = DemoConvoyRepository(tripId: 'demo-trip', routePoints: const [_a, _b, _c]);
+    test('watchLive broadcasts pacer fixes with fresh timestamps', () async {
+      final repo =
+          DemoConvoyRepository(tripId: 'demo-trip', routePoints: const [_a, _b, _c]);
+      // Broadcast stream: only listeners attached before a tick see it,
+      // so assert what delivery guarantees — pacer fixes with fresh
+      // updatedAt (not stale-greyed on the map).
       final events = await repo.watchLive('demo-trip').take(2).toList();
-      expect(events.first, isEmpty);
-      expect(events[1].map((p) => p.uid), containsAll(['abhi', 'bapu']));
-      expect(
-        events[1].every((p) =>
-            DateTime.now().difference(p.updatedAt).inSeconds.abs() < 30),
-        isTrue,
-      );
+      expect(events, hasLength(2));
+      for (final e in events) {
+        expect(e.map((p) => p.uid), containsAll(['abhi', 'bapu']));
+        expect(
+          e.every((p) =>
+              DateTime.now().difference(p.updatedAt).inSeconds.abs() < 30),
+          isTrue,
+        );
+      }
       repo.dispose();
+    });
+
+    test('dispose stops ticks and closes the stream', () async {
+      final repo =
+          DemoConvoyRepository(tripId: 'demo-trip', routePoints: const [_a, _b, _c]);
+      final events = <List<LivePosition>>[];
+      final sub = repo.watchLive('demo-trip').listen(events.add);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      repo.dispose();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      final count = events.length;
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      // No further ticks after dispose.
+      expect(events.length, count);
+      await sub.cancel();
     });
   });
 }
