@@ -40,8 +40,24 @@ ml.LatLng _mlLatLng(LatLng p) => ml.LatLng(p.latitude, p.longitude);
 
 LatLng _toLatLng(ml.LatLng p) => LatLng(p.latitude, p.longitude);
 
-String _hex(Color c) =>
-    '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
+/// Caption under a rider pin: name + remaining distance.
+String memberCaption(String name, double? remainingM) {
+  if (remainingM == null) return name;
+  return '$name\n${(remainingM / 1000).toStringAsFixed(1)} km left';
+}
+
+/// Pin color per rider (stable, distinct from route blue + dest red).
+String memberColor(String uid, {required bool stale}) {
+  if (stale) return '#9AA0A6';
+  switch (uid) {
+    case 'abhi':
+      return '#0F9D58';
+    case 'bapu':
+      return '#F29900';
+    default:
+      return '#0097A7';
+  }
+}
 
 /// OSM convoy map canvas on MapLibre vector tiles (OpenFreeMap, keyless).
 ///
@@ -287,7 +303,6 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
   Future<void> _syncSymbols() async {
     final c = _ml;
     if (c == null || !_styleLoaded) return;
-    final primary = Theme.of(context).colorScheme.primary;
     final now = DateTime.now();
 
     final tripsAsync = ref.read(watchTripsProvider);
@@ -309,6 +324,12 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
     final me = ref.read(myPositionProvider);
     final pois = ref.read(nearbyPoisProvider);
     final searchFocus = ref.read(searchFocusProvider);
+    // Selected-route points back the per-rider remaining captions.
+    final allRoutes = ref.read(routesProvider).value ?? const <TripRoute>[];
+    final selIdx = ref.read(selectedRouteIndexProvider);
+    final List<LatLng> routePts = allRoutes.isEmpty
+        ? const <LatLng>[]
+        : allRoutes[selIdx.clamp(0, allRoutes.length - 1)].points;
     // Destination pin: the searched/dest point while demoing, else the
     // static trip area (convoyMapCenter was wrong for Bhosari demos).
     final destAt = inDemo
@@ -355,30 +376,55 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
             ? LatLng(livePos.lat, livePos.lng)
             : memberOffset(m.uid, i);
         final stale = livePos?.isStale(now) ?? false;
-        final color = stale ? Colors.grey : primary;
         final name = m.displayName.isNotEmpty ? m.displayName : m.uid;
+        final initial = name.isEmpty ? '?' : name[0].toUpperCase();
+        // Remaining distance from the rider's own position (map caption).
+        double? remainingM;
+        if (livePos != null && routePts.length >= 2) {
+          remainingM = remainingRouteM(
+              routePts, LatLng(livePos.lat, livePos.lng));
+        }
         await _upsertCircle(
           c,
           key,
           ml.CircleOptions(
             geometry: _mlLatLng(pinAt),
-            circleRadius: 10,
-            circleColor: _hex(color),
-            circleStrokeWidth: 2,
+            circleRadius: 12,
+            circleColor: memberColor(m.uid, stale: stale),
+            circleStrokeWidth: 2.5,
             circleStrokeColor: '#FFFFFF',
           ),
         );
-        keep.add('$key-label');
+        // Initial INSIDE the dot (white, centered).
+        keep.add('$key-initial');
         await _upsertSymbol(
           c,
-          '$key-label',
+          '$key-initial',
           ml.SymbolOptions(
             geometry: _mlLatLng(pinAt),
-            textField: name.isEmpty ? '?' : name[0].toUpperCase(),
-            textSize: 12,
+            textField: initial,
+            textSize: 14,
             textColor: '#FFFFFF',
+            textAnchor: 'center',
           ),
-          {'kind': 'trip'},
+          const {},
+        );
+        // Full name + remaining below the dot.
+        keep.add('$key-name');
+        await _upsertSymbol(
+          c,
+          '$key-name',
+          ml.SymbolOptions(
+            geometry: _mlLatLng(pinAt),
+            textField: memberCaption(name, remainingM),
+            textSize: 12,
+            textColor: '#202124',
+            textHaloColor: '#FFFFFF',
+            textHaloWidth: 1.5,
+            textAnchor: 'top',
+            textOffset: const Offset(0, 1.4),
+          ),
+          const {},
         );
       }
       // Own chevron.
@@ -715,6 +761,14 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
             ),
             myLocationEnabled: true,
             compassEnabled: false,
+            // Symbols (rider initials + names) above circles + fills —
+            // default order buries text under circle pins.
+            annotationOrder: const [
+              ml.AnnotationType.line,
+              ml.AnnotationType.circle,
+              ml.AnnotationType.fill,
+              ml.AnnotationType.symbol,
+            ],
             onMapCreated: _onCreated,
             onStyleLoadedCallback: _onStyleLoaded,
             onCameraMove: _onCameraMove,
