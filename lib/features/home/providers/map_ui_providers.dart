@@ -55,8 +55,29 @@ final searchingProvider = StateProvider<bool>((ref) => false);
 final searchFocusProvider =
     StateProvider<PlaceSearchResult?>((ref) => null);
 
-/// Active base-map style. [ConvoyMap] switches tile layers on change.
+/// Active base-map style. [ConvoyMap] switches MapLibre style on change.
 final mapStyleProvider = StateProvider<MapStyle>((ref) => MapStyle.standard);
+
+/// Renders the native MapLibre view when true.
+///
+/// Tests override this to false: platform views cannot pump in `flutter
+/// test`, so [ConvoyMap] shows a placeholder pin with identical semantics
+/// instead. Production always leaves this true.
+final mapNativeProvider = StateProvider<bool>((ref) => true);
+
+/// GPS ground speed in m/s. Null when unknown or stationary.
+///
+/// Written by [MapFabs] from the geolocator fix; consumed by the drive
+/// camera for zoom-by-speed. Displayed by the speed badge (Task 6).
+final mySpeedMpsProvider = StateProvider<double?>((ref) => null);
+
+/// Voice guidance mute flag. Toggled by the drive control stack; the
+/// (future) voice engine reads it. Defaults to unmuted.
+final mapMutedProvider = StateProvider<bool>((ref) => false);
+
+/// Compass-reset nonce. Incremented by the drive control stack; [ConvoyMap]
+/// listens and animates bearing back to north without leaving follow mode.
+final compassResetNonceProvider = StateProvider<int>((ref) => 0);
 
 /// Default map center (Wagholi, Pune) — shared fallback for map + sheet.
 const defaultMapCenterLat = 18.6545;

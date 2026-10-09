@@ -1,14 +1,22 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../shared/models/live_position.dart';
 import '../../../shared/models/member.dart';
 import '../../../shared/models/trip.dart';
 import '../../../shared/repositories/trip_repository.dart';
+import '../data/demo_convoy_repository.dart';
 import '../data/mock_trip_datasource.dart';
 
+/// Active demo convoy repository, if a demo is running. Set by the demo
+/// launcher, cleared on exit. Scoped to the container (nothing persists).
+final demoRepositoryProvider =
+    StateProvider<DemoConvoyRepository?>((ref) => null);
+
 /// Default [TripRepository]. Mock in-memory; a later plan swaps in Firestore.
+/// A running demo takes precedence (same interface, scripted pacers).
 final tripRepositoryProvider = Provider<TripRepository>((ref) {
-  return MockTripDataSource();
+  return ref.watch(demoRepositoryProvider) ?? MockTripDataSource();
 });
 
 /// All trips as a stream. Mock downcasts live only in this file (widgets must use the providers below) in

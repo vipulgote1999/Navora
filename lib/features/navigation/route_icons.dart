@@ -27,3 +27,32 @@ IconData maneuverIcon(String maneuverType, String modifier) {
   }
   return Icons.straight;
 }
+
+/// Lane-guidance arrow for an OSRM lane [indication].
+///
+/// Falls back to [Icons.straight] for unknown values; `none` (unmarked
+/// lane) maps to null so callers render nothing for it.
+IconData? laneIcon(String indication) {
+  switch (indication.trim().toLowerCase()) {
+    case 'left':
+      return Icons.turn_left;
+    case 'slight left':
+      return Icons.turn_slight_left;
+    case 'sharp left':
+      return Icons.turn_left;
+    case 'right':
+      return Icons.turn_right;
+    case 'slight right':
+      return Icons.turn_slight_right;
+    case 'sharp right':
+      return Icons.turn_right;
+    case 'straight':
+      return Icons.straight;
+    case 'uturn':
+      return Icons.u_turn_left;
+    case 'none':
+      return null;
+    default:
+      return Icons.straight;
+  }
+}

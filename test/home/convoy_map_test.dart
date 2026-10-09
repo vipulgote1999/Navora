@@ -13,6 +13,7 @@ void main() {
   testWidgets('map renders attribution + H marker + FABs', (t) async {
     await t.pumpWidget(
       ProviderScope(
+        overrides: [mapNativeProvider.overrideWith((ref) => false)],
         child: MaterialApp(
           home: Scaffold(
             body: Column(
@@ -48,7 +49,10 @@ void main() {
     );
     await t.pumpWidget(
       ProviderScope(
-        overrides: [tripRepositoryProvider.overrideWithValue(ds)],
+        overrides: [
+          tripRepositoryProvider.overrideWithValue(ds),
+          mapNativeProvider.overrideWith((ref) => false),
+        ],
         child: MaterialApp(home: Scaffold(body: ConvoyMap())),
       ),
     );
@@ -94,5 +98,70 @@ void main() {
       const LatLng(defaultMapCenterLat, defaultMapCenterLng),
     );
     expect(t.takeException(), isNull);
+  });
+
+  group('drive control stack', () {
+    Future<void> pumpGuiding(WidgetTester t) async {
+      await t.pumpWidget(
+        ProviderScope(
+          overrides: [
+            navigatingProvider.overrideWith((ref) => true),
+            mySpeedMpsProvider.overrideWith((ref) => 11.7),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: const Column(
+                children: [Expanded(child: SizedBox()), NavSpeedPill()],
+              ),
+            ),
+          ),
+        ),
+      );
+      await t.pump();
+    }
+
+    testWidgets('speed pill shows GPS speed while guiding', (t) async {
+      await pumpGuiding(t);
+      expect(find.text('42 km/h'), findsOneWidget);
+    });
+
+    testWidgets('stack has mute, compass, recenter; mic is parked',
+        (t) async {
+      await t.pumpWidget(
+        ProviderScope(
+          overrides: [navigatingProvider.overrideWith((ref) => true)],
+          child: const MaterialApp(home: Scaffold(body: MapFabs())),
+        ),
+      );
+      await t.pump();
+      expect(find.bySemanticsLabel('Mute voice'), findsOneWidget);
+      expect(find.bySemanticsLabel('Reset north'), findsOneWidget);
+      expect(find.bySemanticsLabel('My location'), findsOneWidget);
+      expect(
+        find.byTooltip('Voice guidance coming soon'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('sound tap toggles mute, compass tap bumps reset nonce',
+        (t) async {
+      await t.pumpWidget(
+        ProviderScope(
+          overrides: [navigatingProvider.overrideWith((ref) => true)],
+          child: const MaterialApp(home: Scaffold(body: MapFabs())),
+        ),
+      );
+      await t.pump();
+      final container =
+          ProviderScope.containerOf(t.element(find.byType(MapFabs)));
+      await t.tap(find.bySemanticsLabel('Mute voice'));
+      await t.pump();
+      expect(container.read(mapMutedProvider), isTrue);
+      expect(find.bySemanticsLabel('Unmute voice'), findsOneWidget);
+      await t.tap(find.bySemanticsLabel('Reset north'));
+      await t.pump();
+      expect(container.read(compassResetNonceProvider), 1);
+      expect(t.takeException(), isNull);
+    });
   });
 }

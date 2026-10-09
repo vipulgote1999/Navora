@@ -14,6 +14,13 @@ class RouteStep {
   final double durationS;
   final LatLng location;
 
+  /// Road reference code for shields (e.g. `A2`, `E35`) — empty when absent.
+  final String ref;
+
+  /// Turn lanes at the maneuver intersection — empty when the dataset
+  /// carries no lane data (common outside well-tagged areas).
+  final List<RouteLane> lanes;
+
   const RouteStep({
     required this.instruction,
     required this.maneuverType,
@@ -21,7 +28,18 @@ class RouteStep {
     required this.distanceM,
     required this.durationS,
     required this.location,
+    this.ref = '',
+    this.lanes = const [],
   });
+}
+
+/// One turn lane at an intersection: painted indications + whether the
+/// lane is valid for the current maneuver.
+class RouteLane {
+  final List<String> indications;
+  final bool valid;
+
+  const RouteLane({required this.indications, required this.valid});
 }
 
 /// A routed trip: full polyline + totals + per-step instructions.
@@ -152,6 +170,8 @@ TripRoute? _parseOneRoute(Map<String, dynamic> first) {
           distanceM: ((s['distance'] as num?) ?? 0).toDouble(),
           durationS: ((s['duration'] as num?) ?? 0).toDouble(),
           location: location,
+          ref: (s['ref'] as String?) ?? '',
+          lanes: _parseLanes(s['intersections']),
         ));
         // Fallback geometry from step LineStrings when no overview.
         if (points.isEmpty) {
@@ -231,6 +251,31 @@ String _stepRoadName(RouteStep step) {
   final ix = step.instruction.indexOf(onto);
   if (ix >= 0) return step.instruction.substring(ix + onto.length).trim();
   return '';
+}
+
+/// Parses turn lanes from an OSRM step's `intersections` list.
+///
+/// Only the first intersection (the maneuver location) carries lanes for
+/// the current step. Returns empty when intersections are absent or carry
+/// no lane data — never throws on malformed entries.
+List<RouteLane> _parseLanes(dynamic intersections) {
+  if (intersections is! List || intersections.isEmpty) return const [];
+  final first = intersections.first;
+  if (first is! Map<String, dynamic>) return const [];
+  final lanes = first['lanes'];
+  if (lanes is! List) return const [];
+  final out = <RouteLane>[];
+  for (final lane in lanes) {
+    if (lane is! Map<String, dynamic>) continue;
+    final indications = lane['indications'];
+    out.add(RouteLane(
+      indications: indications is List
+          ? [for (final i in indications) if (i is String) i]
+          : const <String>[],
+      valid: (lane['valid'] as bool?) ?? false,
+    ));
+  }
+  return List.unmodifiable(out);
 }
 
 /// Index of the step whose maneuver location is closest to [pos].

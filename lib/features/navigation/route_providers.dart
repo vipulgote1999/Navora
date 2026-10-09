@@ -1,9 +1,21 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:navora/features/home/providers/map_ui_providers.dart';
+import 'package:navora/features/trips/providers/trip_providers.dart';
 
 import 'route_models.dart';
+import 'drive_simulator.dart';
 import 'routing_repository.dart';
+
+/// On-device mock drive (see `drive_simulator.dart`). Same instance per
+/// container so UI toggles and tests share run state.
+final driveSimulatorProvider = Provider<DriveSimulator>((ref) {
+  return DriveSimulator();
+});
+
+/// True while the mock drive is writing synthetic fixes.
+final simulatingProvider = StateProvider<bool>((ref) => false);
 
 /// HTTP routing engine. Override in tests with a fake client-backed repo.
 final routingRepositoryProvider = Provider<RoutingRepository>((ref) {
@@ -79,6 +91,23 @@ void clearRoute(WidgetRef ref) {
   ref.read(navigatingProvider.notifier).state = false;
   ref.read(routeOriginProvider.notifier).state = null;
   ref.read(routeDestinationProvider.notifier).state = null;
+}
+
+/// Full navigation exit: stops the mock drive, drops a running demo
+/// convoy (override + selection), then clears the route and follow mode.
+///
+/// Every End/X control must route through here so no demo residue or
+/// stray timers survive guidance.
+void exitNavigation(WidgetRef ref) {
+  ref.read(driveSimulatorProvider).stop();
+  ref.read(simulatingProvider.notifier).state = false;
+  // Dispose the demo repo (cancels the pacer timer + closes its stream)
+  // before dropping the override so nothing ticks after exit.
+  ref.read(demoRepositoryProvider)?.dispose();
+  ref.read(demoRepositoryProvider.notifier).state = null;
+  ref.read(selectedTripIdProvider.notifier).state = null;
+  clearRoute(ref);
+  ref.read(mapFollowModeProvider.notifier).state = FollowMode.none;
 }
 
 

@@ -100,8 +100,11 @@ class MapFabs extends ConsumerWidget {
             pos.accuracy > 0 ? pos.accuracy : null;
         // Heading is meaningful only while moving — stationary fixes report
         // stale/zero bearings, so the wedge hides (Google Maps behaviour).
+        // Same rule for speed: the drive camera holds zoom while stopped.
         ref.read(myHeadingDegProvider.notifier).state =
             pos.speed > 1 ? pos.heading : null;
+        ref.read(mySpeedMpsProvider.notifier).state =
+            pos.speed > 1 ? pos.speed : null;
         ref.read(mapFollowModeProvider.notifier).state = FollowMode.me;
       } catch (_) {
         if (context.mounted) {
@@ -160,39 +163,153 @@ class MapFabs extends ConsumerWidget {
     }
   }
 
+  /// White circular Maps-style control with a 48dp hit box.
+  Widget _control({
+    required String label,
+    required IconData icon,
+    required VoidCallback? onPressed,
+    String? heroTag,
+    String? tooltip,
+  }) {
+    final button = FloatingActionButton.small(
+      heroTag: heroTag,
+      backgroundColor: Colors.white,
+      foregroundColor: const Color(0xFF5F6368),
+      elevation: 2,
+      onPressed: onPressed,
+      child: Icon(icon),
+    );
+    final labeled = Semantics(label: label, button: true, child: button);
+    final boxed = ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+      child: Center(child: labeled),
+    );
+    if (tooltip == null) return boxed;
+    return Tooltip(message: tooltip, child: boxed);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    Widget hitBox(Widget child) => ConstrainedBox(
-      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-      child: Center(child: child),
-    );
+    // Google Maps: once guiding, the directions entry disappears and the
+    // right side becomes the drive stack (mic/search parked with
+    // tooltips, sound toggle, compass reset, recenter).
+    final navigating = ref.watch(navigatingProvider);
+    final muted = ref.watch(mapMutedProvider);
+    if (!navigating) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _control(
+            label: 'My location',
+            icon: Icons.my_location,
+            heroTag: 'my-location',
+            onPressed: () => _locate(context, ref),
+          ),
+          const SizedBox(height: 12),
+          ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            child: Center(
+              child: Semantics(
+                label: 'Get directions',
+                button: true,
+                child: FloatingActionButton(
+                  heroTag: 'get-directions',
+                  backgroundColor: const Color(0xFF1A73E8),
+                  foregroundColor: Colors.white,
+                  elevation: 2,
+                  onPressed: () => _directions(ref),
+                  child: const Icon(Icons.directions),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        hitBox(
-          Semantics(
-            label: 'My location',
-            button: true,
-            child: FloatingActionButton.small(
-              onPressed: () => _locate(context, ref),
-              child: const Icon(Icons.my_location),
-            ),
-          ),
+        _control(
+          label: 'Voice search',
+          icon: Icons.mic,
+          heroTag: 'voice-search',
+          tooltip: 'Voice guidance coming soon',
+          onPressed: null,
         ),
         const SizedBox(height: 12),
-        hitBox(
-          Semantics(
-            label: 'Get directions',
-            button: true,
-            child: FloatingActionButton(
-              backgroundColor: Colors.teal,
-              foregroundColor: Colors.white,
-              onPressed: () => _directions(ref),
-              child: const Icon(Icons.directions),
-            ),
-          ),
+        _control(
+          label: 'Search along route',
+          icon: Icons.search,
+          heroTag: 'route-search',
+          tooltip: 'Search along route coming soon',
+          onPressed: null,
+        ),
+        const SizedBox(height: 12),
+        _control(
+          label: muted ? 'Unmute voice' : 'Mute voice',
+          icon: muted ? Icons.volume_off : Icons.volume_up,
+          heroTag: 'sound-toggle',
+          onPressed: () =>
+              ref.read(mapMutedProvider.notifier).state = !muted,
+        ),
+        const SizedBox(height: 12),
+        _control(
+          label: 'Reset north',
+          icon: Icons.explore,
+          heroTag: 'compass-reset',
+          onPressed: () =>
+              ref.read(compassResetNonceProvider.notifier).state++,
+        ),
+        const SizedBox(height: 12),
+        _control(
+          label: 'My location',
+          icon: Icons.my_location,
+          heroTag: 'my-location',
+          onPressed: () => _locate(context, ref),
         ),
       ],
+    );
+  }
+}
+
+/// GPS speed pill for drive mode (bottom-start, Maps position).
+///
+/// Visible only while guiding with a known speed. One Text widget so
+/// readers and tests see `42 km/h` verbatim.
+class NavSpeedPill extends ConsumerWidget {
+  const NavSpeedPill({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final navigating = ref.watch(navigatingProvider);
+    final speed = ref.watch(mySpeedMpsProvider);
+    if (!navigating || speed == null) return const SizedBox.shrink();
+    final kmh = (speed * 3.6).round();
+    return Semantics(
+      label: 'Current speed $kmh kilometres per hour',
+      excludeSemantics: true,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(40),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Text(
+          '$kmh km/h',
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF202124),
+          ),
+        ),
+      ),
     );
   }
 }

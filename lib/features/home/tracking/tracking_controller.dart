@@ -5,6 +5,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navora/features/home/providers/map_ui_providers.dart';
 import 'package:navora/features/home/tracking/fix_throttle.dart';
+import 'package:navora/features/navigation/drive_camera.dart'
+    show courseMadeGood;
 
 /// Throttled live-GPS writer owned by [MapShell] lifecycle.
 ///
@@ -82,12 +84,23 @@ class TrackingController {
     }
     _lastFix = pos;
     _lastTime = now;
-    ref.read(myPositionProvider.notifier).state =
-        LatLng(pos.latitude, pos.longitude);
+    final fix = LatLng(pos.latitude, pos.longitude);
+    ref.read(myPositionProvider.notifier).state = fix;
     ref.read(myAccuracyMProvider.notifier).state =
         pos.accuracy > 0 ? pos.accuracy : null;
-    ref.read(myHeadingDegProvider.notifier).state =
-        pos.speed > 1 ? pos.heading : null;
+    // Device heading while moving; course-made-good fallback when the
+    // device reports none but displacement shows real motion; else null
+    // so the camera holds bearing (Google Maps behaviour).
+    final lastLatLng = last == null
+        ? null
+        : LatLng(last.latitude, last.longitude);
+    ref.read(myHeadingDegProvider.notifier).state = pos.speed > 1
+        ? pos.heading
+        : courseMadeGood(lastLatLng, fix);
+    // Same rule for speed: the drive camera holds zoom and the speed
+    // badge hides while stopped (Google Maps behaviour).
+    ref.read(mySpeedMpsProvider.notifier).state =
+        pos.speed > 1 ? pos.speed : null;
   }
 
   Future<void> stop() async {

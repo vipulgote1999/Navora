@@ -146,12 +146,15 @@ class _MapShellState extends ConsumerState<MapShell>
   Widget build(BuildContext context) {
     final navIndex = ref.watch(navIndexProvider);
     // Maps-style nav mode: the maneuver banner replaces search + chips
-    // while guiding (search returns on arrival/stop).
+    // while guiding (search returns on arrival/stop). Google Maps also
+    // hides the bottom tab bar while guiding so the ETA sheet owns the
+    // bottom edge — otherwise the sheet buttons get cut off behind tabs.
     final navigating = ref.watch(navigatingProvider);
 
     return Scaffold(
       drawer: const TripDrawer(),
-      bottomNavigationBar: const TripNavBar(),
+      // Google Maps: no Explore/You/Contribute tabs during guidance.
+      bottomNavigationBar: navigating ? null : const TripNavBar(),
       body: Builder(
         builder: (scaffoldContext) => Stack(
           children: [
@@ -181,16 +184,27 @@ class _MapShellState extends ConsumerState<MapShell>
                 ],
               ),
             ),
-            const Positioned(
+            // Google Maps: controls sit above the ETA card, end side.
+            // In nav mode the sheet is taller (ETA), so lift FABs.
+            Positioned(
               right: 12,
-              bottom: 180,
-              child: MapFabs(),
+              bottom: navigating ? 320 : 180,
+              child: const MapFabs(),
             ),
-            const Positioned(
-              left: 12,
-              bottom: 180,
-              child: _MapStyleButton(),
-            ),
+            // Google Maps: speed pill bottom-start while guiding.
+            if (navigating)
+              const Positioned(
+                left: 12,
+                bottom: 320,
+                child: NavSpeedPill(),
+              ),
+            // Google Maps: no layer switcher while guiding.
+            if (!navigating)
+              const Positioned(
+                left: 12,
+                bottom: 180,
+                child: _MapStyleButton(),
+              ),
             // Anchored bottom-center: a bare sheet child would align to
             // the top of the Stack and cover the search bar.
             Align(
@@ -327,6 +341,9 @@ class _MapStyleButton extends ConsumerWidget {
       child: FloatingActionButton.small(
         heroTag: 'map-style',
         tooltip: 'Change map style',
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF5F6368),
+        elevation: 2,
         onPressed: () {
           final next =
               MapStyle.values[(style.index + 1) % MapStyle.values.length];

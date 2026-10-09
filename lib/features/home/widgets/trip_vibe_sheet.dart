@@ -5,9 +5,12 @@ import 'package:share_plus/share_plus.dart';
 import 'package:navora/features/home/providers/map_ui_providers.dart';
 import 'package:navora/features/home/widgets/map_fabs.dart';
 import 'package:navora/features/home/places/geocode_repository.dart';
+import 'package:navora/features/navigation/drive_camera.dart';
 import 'package:navora/features/navigation/route_icons.dart';
 import 'package:navora/features/navigation/route_models.dart';
 import 'package:navora/features/navigation/route_providers.dart';
+import 'package:navora/features/trips/data/demo_bhosari_route.dart';
+import 'package:navora/features/trips/data/demo_convoy_repository.dart';
 import 'package:navora/features/trips/providers/trip_providers.dart';
 import 'package:navora/shared/models/live_position.dart';
 import 'package:navora/shared/models/trip.dart';
@@ -50,6 +53,51 @@ class TripVibeSheet extends ConsumerWidget {
     }
   }
 
+  /// Starts the scripted demo convoy to Bhosari (Abhi + Bapu + Me).
+  ///
+  /// Destination prefers the pinned search result, else the canned
+  /// Bhosari coords. Origin is the last GPS fix when known, else the
+  /// trip area. Fetches the live route; on failure the canned route
+  /// backs the pacers so the demo never dies on stage. Me navigates
+  /// through the normal guidance stack.
+  Future<void> _startDemo(WidgetRef ref, BuildContext context) async {
+    const fallback =
+        LatLng(defaultMapCenterLat, defaultMapCenterLng);
+    final focus = ref.read(searchFocusProvider);
+    final dest = focus != null
+        ? LatLng(focus.lat, focus.lng)
+        : demoBhosariDestination;
+    final origin = ref.read(myPositionProvider) ?? fallback;
+    setRouteEndpoints(ref, origin, dest);
+    ref.read(routeNoticeProvider.notifier).state = null;
+    List<LatLng> points = demoBhosariRoute.points;
+    var offline = false;
+    try {
+      final routes = await ref.read(routesProvider.future);
+      if (routes.isNotEmpty) {
+        final selected = ref.read(selectedRouteIndexProvider);
+        points = routes[selected.clamp(0, routes.length - 1)].points;
+      } else {
+        offline = true;
+      }
+    } catch (_) {
+      offline = true;
+    }
+    ref.read(demoRepositoryProvider.notifier).state =
+        DemoConvoyRepository(tripId: demoTripId, routePoints: points);
+    ref.read(selectedTripIdProvider.notifier).state = demoTripId;
+    ref.read(navigatingProvider.notifier).state = true;
+    ref.read(mapFollowModeProvider.notifier).state = FollowMode.me;
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(offline
+            ? 'Demo convoy — Abhi & Bapu riding (offline route)'
+            : 'Demo convoy — Abhi & Bapu riding'),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tripsAsync = ref.watch(watchTripsProvider);
@@ -88,11 +136,17 @@ class TripVibeSheet extends ConsumerWidget {
     final searchPlace = ref.watch(searchFocusProvider);
     final routeRequested = ref.watch(routeOriginProvider) != null &&
         ref.watch(routeDestinationProvider) != null;
+    // Google Maps: once guiding, the Navigate entries disappear — the
+    // sheet becomes route-only (ETA + End + steps in _RouteSection).
+    final navigating = ref.watch(navigatingProvider);
 
     return DraggableScrollableSheet(
       controller: controller,
-      initialChildSize: 0.22,
-      minChildSize: 0.12,
+      // Google Maps: nav peek is taller so the ETA (time + distance •
+      // arrival + End) is fully visible without a drag — explore peek
+      // stays compact.
+      initialChildSize: navigating ? 0.32 : 0.22,
+      minChildSize: navigating ? 0.22 : 0.12,
       maxChildSize: 0.75,
       expand: false,
       builder: (context, scrollController) {
@@ -145,161 +199,185 @@ class TripVibeSheet extends ConsumerWidget {
                           ],
                         ),
                       ),
-                      Semantics(
-                        label: 'Dismiss search result',
-                        button: true,
-                        child: IconButton(
-                          icon: const Icon(Icons.close),
-                          constraints: const BoxConstraints(
-                            minWidth: 48,
-                            minHeight: 48,
+                      // Google Maps: destination is locked while guiding —
+                      // dismiss returns with End/Clear, not mid-navigation.
+                      if (!navigating)
+                        Semantics(
+                          label: 'Dismiss search result',
+                          button: true,
+                          child: IconButton(
+                            icon: const Icon(Icons.close),
+                            constraints: const BoxConstraints(
+                              minWidth: 48,
+                              minHeight: 48,
+                            ),
+                            onPressed: () => ref
+                                .read(searchFocusProvider.notifier)
+                                .state = null,
                           ),
-                          onPressed: () => ref
-                              .read(searchFocusProvider.notifier)
-                              .state = null,
                         ),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size(48, 48),
+                  // Google Maps: while guiding the Navigate/Share entry is
+                  // gone — _RouteSection below owns ETA + End + steps.
+                  if (!navigating)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(48, 48),
+                            ),
+                            onPressed: () => _startRoute(
+                              ref,
+                              LatLng(searchPlace.lat, searchPlace.lng),
+                              context,
+                            ),
+                            icon: const Icon(Icons.navigation),
+                            label: const Text('Navigate'),
                           ),
-                          onPressed: () => _startRoute(
-                            ref,
-                            LatLng(searchPlace.lat, searchPlace.lng),
-                            context,
-                          ),
-                          icon: const Icon(Icons.navigation),
-                          label: const Text('Navigate'),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(48, 48),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(48, 48),
+                            ),
+                            onPressed: () async {
+                              try {
+                                await Share.share(
+                                  '${searchPlace.title}\n'
+                                  'https://www.openstreetmap.org/'
+                                  '?mlat=${searchPlace.lat}'
+                                  '&mlon=${searchPlace.lng}'
+                                  '#map=15/${searchPlace.lat}/${searchPlace.lng}',
+                                );
+                              } catch (_) {
+                                // No share target: stay on the map.
+                              }
+                            },
+                            icon: const Icon(Icons.share_outlined),
+                            label: const Text('Share'),
                           ),
-                          onPressed: () async {
-                            try {
-                              await Share.share(
-                                '${searchPlace.title}\n'
-                                'https://www.openstreetmap.org/'
-                                '?mlat=${searchPlace.lat}'
-                                '&mlon=${searchPlace.lng}'
-                                '#map=15/${searchPlace.lat}/${searchPlace.lng}',
-                              );
-                            } catch (_) {
-                              // No share target: stay on the map.
-                            }
-                          },
-                          icon: const Icon(Icons.share_outlined),
-                          label: const Text('Share'),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
                   const Divider(height: 24),
                 ],
                 if (routeRequested) ...[
                   const _RouteSection(),
                   const Divider(height: 24),
                 ],
-                Text(
-                  focus?.name ?? 'Trip vibe',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 4),
-                if (resolved != null)
-                  Chip(
-                    label: Text('Last updated ${ageSec}s ago'),
-                    labelStyle: TextStyle(
-                      color: stale
-                          ? Theme.of(context).colorScheme.outline
-                          : Theme.of(context).colorScheme.onSurface,
-                    ),
+                // Google Maps: guiding hides vibe summary + trip list — the
+                // sheet is route-only until End/Clear restores explore UI.
+                if (!navigating) ...[
+                  Text(
+                    focus?.name ?? 'Trip vibe',
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(48, 48),
+                  const SizedBox(height: 4),
+                  if (resolved != null)
+                    Chip(
+                      label: Text('Last updated ${ageSec}s ago'),
+                      labelStyle: TextStyle(
+                        color: stale
+                            ? Theme.of(context).colorScheme.outline
+                            : Theme.of(context).colorScheme.onSurface,
                       ),
-                      onPressed: () => _startRoute(
-                        ref,
-                        const LatLng(
-                          defaultMapCenterLat,
-                          defaultMapCenterLng,
+                    ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    children: [
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(48, 48),
                         ),
-                        context,
+                        onPressed: () => _startRoute(
+                          ref,
+                          const LatLng(
+                            defaultMapCenterLat,
+                            defaultMapCenterLng,
+                          ),
+                          context,
+                        ),
+                        child: const Text('Navigate'),
                       ),
-                      child: const Text('Navigate'),
-                    ),
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(48, 48),
-                      ),
-                      onPressed: resolved == null
-                          ? null
-                          : () async {
-                              try {
-                                await Share.share(shareTextFor(resolved));
-                              } catch (_) {
-                                // No share target: stay on the map, never crash.
-                              }
-                            },
-                      child: const Text('Share'),
-                    ),
-                    Semantics(
-                      button: true,
-                      label: isSaved ? 'Unsave trip' : 'Save trip',
-                      child: TextButton(
+                      TextButton(
                         style: TextButton.styleFrom(
                           minimumSize: const Size(48, 48),
                         ),
                         onPressed: resolved == null
                             ? null
                             : () async {
-                                await toggleSavedTrip(ref, resolved.id);
+                                try {
+                                  await Share.share(shareTextFor(resolved));
+                                } catch (_) {
+                                  // No share target: stay on the map, never crash.
+                                }
                               },
-                        child: Text(isSaved ? 'Saved ✓' : 'Save'),
+                        child: const Text('Share'),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                if (tripsAsync.hasError)
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text("Couldn't load trips"),
-                      ),
-                      TextButton(
-                        style: TextButton.styleFrom(
-                          minimumSize: const Size(48, 48),
+                      Semantics(
+                        button: true,
+                        label: isSaved ? 'Unsave trip' : 'Save trip',
+                        child: TextButton(
+                          style: TextButton.styleFrom(
+                            minimumSize: const Size(48, 48),
+                          ),
+                          onPressed: resolved == null
+                              ? null
+                              : () async {
+                                  await toggleSavedTrip(ref, resolved.id);
+                                },
+                          child: Text(isSaved ? 'Saved ✓' : 'Save'),
                         ),
-                        onPressed: () =>
-                            ref.invalidate(watchTripsProvider),
-                        child: const Text('Retry'),
+                      ),
+                      Semantics(
+                        button: true,
+                        label: 'Start demo convoy',
+                        child: TextButton.icon(
+                          style: TextButton.styleFrom(
+                            minimumSize: const Size(48, 48),
+                          ),
+                          onPressed: () => _startDemo(ref, context),
+                          icon: const Icon(Icons.groups_outlined),
+                          label: const Text('Demo convoy'),
+                        ),
                       ),
                     ],
-                  )
-                else if (trips.isEmpty)
-                  const Text('No trips yet — create one to get started.')
-                else
-                  for (final trip in trips)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: TripCard(
-                        trip: trip,
-                        memberCount: memberCounts[trip.id] ?? 0,
+                  ),
+                  const SizedBox(height: 8),
+                  if (tripsAsync.hasError)
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text("Couldn't load trips"),
+                        ),
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            minimumSize: const Size(48, 48),
+                          ),
+                          onPressed: () =>
+                              ref.invalidate(watchTripsProvider),
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    )
+                  else if (trips.isEmpty)
+                    const Text('No trips yet — create one to get started.')
+                  else
+                    for (final trip in trips)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: TripCard(
+                          trip: trip,
+                          memberCount: memberCounts[trip.id] ?? 0,
+                        ),
                       ),
-                    ),
+                ],
               ],
             ),
           ),
@@ -378,10 +456,26 @@ class _RouteSection extends ConsumerWidget {
       final route = ref.read(routeProvider).value;
       final dest = ref.read(routeDestinationProvider);
       if (route == null || dest == null) return;
+      // Arrival always wins.
       if (const Distance().as(LengthUnit.Meter, next, dest) <= 25) {
         ref.read(navigatingProvider.notifier).state = false;
         ref.read(routeNoticeProvider.notifier).state =
             'Arrived at destination ✓';
+        return;
+      }
+      // First real fix after a fallback start: the origin froze as the
+      // trip area because no fix existed yet. Re-anchor to the fix when
+      // it is near the route (a far fix is the reroute case below).
+      // Returns early: deviation is re-evaluated against the refetched
+      // route.
+      const fallback =
+          LatLng(defaultMapCenterLat, defaultMapCenterLng);
+      final origin = ref.read(routeOriginProvider);
+      if (origin != null &&
+          origin == fallback &&
+          const Distance().as(LengthUnit.Meter, origin, next) > 25 &&
+          minDistanceToRouteM(route, next) <= 50) {
+        ref.read(routeOriginProvider.notifier).state = next;
         return;
       }
       if (minDistanceToRouteM(route, next) > 50) {
@@ -478,8 +572,10 @@ class _RouteSection extends ConsumerWidget {
                     minHeight: 48,
                   ),
                   onPressed: () {
-                    clearRoute(ref);
+                    // Full exit (also drops a demo/sim) so the camera
+                    // stops tracking and explore UI returns.
                     ref.read(routeNoticeProvider.notifier).state = null;
+                    exitNavigation(ref);
                   },
                 ),
               ),
@@ -502,48 +598,102 @@ class _RouteSection extends ConsumerWidget {
               ],
             ),
           ],
-          // ETA card while guiding, full-width Start otherwise.
+          // Google Maps ETA footer: white card, 28px green time +
+          // 16px grey distance • ETA. Reference: Nav SDK
+          // CustomNavigationFooterExample (radius 12, padding 20/8).
           if (navigating && route != null) ...[
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        formatLongDuration(route.durationS),
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineSmall
-                            ?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.error,
-                            ),
-                      ),
-                      Text(
-                        '${(route.distanceM / 1000).toStringAsFixed(1)} km · ${formatArrivalTime(route.durationS)}',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
+            Container(
+              width: double.infinity,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(25),
+                    blurRadius: 8,
+                    offset: const Offset(0, -2),
                   ),
-                ),
-                TextButton(
-                  style: TextButton.styleFrom(
-                    minimumSize: const Size(48, 48),
-                    foregroundColor:
-                        Theme.of(context).colorScheme.error,
+                ],
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          formatLongDuration(route.durationS),
+                          style: TextStyle(
+                            color: Colors.green.shade800,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w500,
+                            height: 1.1,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${(route.distanceM / 1000).toStringAsFixed(1)} km · ${formatArrivalTime(route.durationS)}',
+                          style: TextStyle(
+                            color: Colors.grey.shade700,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  onPressed: () {
-                    ref.read(navigatingProvider.notifier).state = false;
-                    ref.read(mapFollowModeProvider.notifier).state =
-                        FollowMode.none;
-                  },
-                  child: const Text('End'),
-                ),
-              ],
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(48, 48),
+                      foregroundColor:
+                          Theme.of(context).colorScheme.error,
+                    ),
+                    onPressed: () => exitNavigation(ref),
+                    child: const Text('End'),
+                  ),
+                  Builder(
+                    builder: (context) {
+                      final simulating = ref.watch(simulatingProvider);
+                      return Semantics(
+                        label: simulating
+                            ? 'Stop simulation'
+                            : 'Simulate drive',
+                        button: true,
+                        child: IconButton(
+                          icon: Icon(simulating
+                              ? Icons.stop
+                              : Icons.play_arrow),
+                          constraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 48,
+                          ),
+                          tooltip: simulating
+                              ? 'Stop mock drive'
+                              : 'Simulate drive along route',
+                          onPressed: () {
+                            final sim =
+                                ref.read(driveSimulatorProvider);
+                            if (simulating) {
+                              sim.stop();
+                              ref
+                                  .read(simulatingProvider.notifier)
+                                  .state = false;
+                            } else {
+                              sim.start(ref, route);
+                            }
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
             ),
+            if (ref.watch(demoRepositoryProvider) != null)
+              const _PacerChips(),
           ] else if (route != null) ...[
             const SizedBox(height: 8),
             SizedBox(
@@ -595,7 +745,11 @@ class _RouteSection extends ConsumerWidget {
                   style: TextButton.styleFrom(
                     minimumSize: const Size(48, 48),
                   ),
-                  onPressed: () => ref.invalidate(routeProvider),
+                  // Invalidate the list provider (cascades to the
+                  // selected-route provider): invalidating only
+                  // routeProvider re-reads the cached [] without a
+                  // network fetch, so Retry would silently do nothing.
+                  onPressed: () => ref.invalidate(routesProvider),
                   child: const Text('Retry'),
                 ),
               ],
@@ -623,6 +777,70 @@ class _RouteSection extends ConsumerWidget {
                 ),
               ),
         ],
+      ),
+    );
+  }
+}
+
+/// Per-member remaining chips for the demo convoy (`Abhi · 2.1 km · 4 min`).
+///
+/// Shown only while a demo runs with live pacer data; hidden for empty
+/// or stale data. Remaining distance comes from route progress
+/// ([remainingRouteM]); minutes divide by the pacer's own speed.
+class _PacerChips extends ConsumerWidget {
+  const _PacerChips();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final demo = ref.watch(demoRepositoryProvider);
+    if (demo == null) return const SizedBox.shrink();
+    final route = ref.watch(routeProvider).value;
+    if (route == null || route.points.length < 2) {
+      return const SizedBox.shrink();
+    }
+    final live = ref.watch(livePositionsProvider(demoTripId)).value ??
+        const <LivePosition>[];
+    if (live.isEmpty) return const SizedBox.shrink();
+    final members = ref.watch(tripMembersProvider(demoTripId));
+    final names = {for (final m in members) m.uid: m.displayName};
+    final now = DateTime.now();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Semantics(
+        label: 'Convoy remaining',
+        container: true,
+        explicitChildNodes: true,
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final p in live)
+              if (!(p.isStale(now)))
+                Builder(
+                  builder: (context) {
+                    final name = (names[p.uid] ?? p.uid).trim();
+                    final label = name.isEmpty ? p.uid : name;
+                    final String text;
+                    if (p.status == 'arrived') {
+                      text = '$label · arrived';
+                    } else {
+                      final remaining = remainingRouteM(
+                        route.points,
+                        LatLng(p.lat, p.lng),
+                      );
+                      final mins = (((remaining /
+                                          (p.speed > 0 ? p.speed : 1)) /
+                                      60)
+                                  .round())
+                              .clamp(1, 1 << 30);
+                      text =
+                          '$label · ${(remaining / 1000).toStringAsFixed(1)} km · $mins min';
+                    }
+                    return Chip(label: Text(text));
+                  },
+                ),
+          ],
+        ),
       ),
     );
   }

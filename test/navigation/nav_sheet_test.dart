@@ -9,6 +9,9 @@ import 'package:navora/features/home/widgets/trip_vibe_sheet.dart';
 import 'package:navora/features/navigation/route_models.dart';
 import 'package:navora/features/navigation/route_providers.dart';
 import 'package:navora/features/navigation/routing_repository.dart';
+import 'package:navora/features/trips/data/demo_bhosari_route.dart';
+import 'package:navora/features/trips/data/demo_convoy_repository.dart';
+import 'package:navora/features/trips/providers/trip_providers.dart';
 
 TripRoute sampleRoute() => const TripRoute(
       points: [
@@ -50,6 +53,10 @@ class FakeRoutingRepository extends RoutingRepository {
   int calls = 0;
   final TripRoute route;
 
+  /// When true, the first [fetchRoutes] call returns [] (simulated
+  /// failure), later calls succeed. Drives the retry-refetch test.
+  bool failFirst = false;
+
   FakeRoutingRepository(this.route);
 
   @override
@@ -60,6 +67,7 @@ class FakeRoutingRepository extends RoutingRepository {
     http.Client? client,
   }) async {
     calls++;
+    if (failFirst && calls == 1) return const [];
     return [route];
   }
 
@@ -94,6 +102,25 @@ Future<void> pumpSheet(
   );
   await t.pump();
   await t.pump(const Duration(milliseconds: 100));
+}
+
+final _liveSubs = <ProviderSubscription<dynamic>>[];
+
+/// Keeps a live-provider subscription open (a dropped bare read never
+/// delivers under fake async) for tests asserting on streamed values.
+void containerListenLive(WidgetTester t) {
+  final container =
+      ProviderScope.containerOf(t.element(find.byType(TripVibeSheet)));
+  _liveSubs.add(container.listen(livePositionsProvider('demo-trip'), (_, _) {}));
+}
+
+/// Closes subscriptions opened by [containerListenLive] so periodic
+/// streams cancel before teardown (else "Timer is still pending").
+void closeLiveListen() {
+  for (final sub in _liveSubs) {
+    sub.close();
+  }
+  _liveSubs.clear();
 }
 
 void main() {
@@ -189,13 +216,154 @@ void main() {
       expect(t.takeException(), isNull);
     });
 
+    testWidgets('retry refetches routes from the network', (t) async {
+      final fake = FakeRoutingRepository(sampleRoute())..failFirst = true;
+      await pumpSheet(t, overrides: [
+        routingRepositoryProvider.overrideWithValue(fake),
+        routeOriginProvider.overrideWith(
+            (ref) => const LatLng(18.6545, 73.9412)),
+        routeDestinationProvider.overrideWith(
+            (ref) => const LatLng(18.6645, 73.9512)),
+      ]);
+      expect(
+        find.text('No route found — check connection'),
+        findsOneWidget,
+      );
+      expect(fake.calls, 1);
+      await t.tap(find.text('Retry'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 100));
+      expect(fake.calls, 2);
+      expect(find.text('Turn right onto MG Road'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    });
+
     testWidgets('no endpoints shows no route section', (t) async {
       await pumpSheet(t);
       expect(find.bySemanticsLabel('Route details'), findsNothing);
     });
 
-    testWidgets('arrival stops navigation with notice', (t) async {
-      final dest = const LatLng(18.6645, 73.9512);
+    testWidgets('demo convoy starts guided demo with pacers', (t) async {
+      final fake = FakeRoutingRepository(sampleRoute());
+      await pumpSheet(t, overrides: [
+        routingRepositoryProvider.overrideWithValue(fake),
+      ]);
+      await t.tap(find.text('Demo convoy'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 100));
+      final container =
+          ProviderScope.containerOf(t.element(find.byType(TripVibeSheet)));
+      expect(container.read(navigatingProvider), isTrue);
+      expect(container.read(demoRepositoryProvider), isNotNull);
+      expect(
+        container.read(routeDestinationProvider),
+        demoBhosariDestination,
+      );
+      // Pacers flow through the live provider for the demo trip.
+      // Keep a live subscription (a dropped bare read never delivers),
+      // advance past the 1s pacer tick, then read synchronously.
+      containerListenLive(t);
+      await t.pump();
+      await t.pump(const Duration(seconds: 2));
+      final live =
+          container.read(livePositionsProvider('demo-trip')).value;
+      expect(live, isNotNull);
+      expect(live!.map((p) => p.uid), containsAll(['abhi', 'bapu']));
+      // End exits cleanly with no residue.
+      await t.tap(find.text('End'));
+      await t.pump();
+      closeLiveListen();
+      await t.pump();
+      expect(container.read(navigatingProvider), isFalse);
+      expect(container.read(demoRepositoryProvider), isNull);
+      // Flush the demo-start SnackBar timer so teardown is clean.
+      await t.pump(const Duration(seconds: 5));
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('demo shows per-member remaining chips', (t) async {
+      final fake = FakeRoutingRepository(sampleRoute());
+      final demo = DemoConvoyRepository(
+        tripId: demoTripId,
+        routePoints: sampleRoute().points,
+      );
+      await pumpSheet(t, overrides: [
+        routingRepositoryProvider.overrideWithValue(fake),
+        demoRepositoryProvider.overrideWith((ref) => demo),
+        routeOriginProvider.overrideWith(
+            (ref) => const LatLng(18.6545, 73.9412)),
+        routeDestinationProvider.overrideWith(
+            (ref) => const LatLng(18.6645, 73.9512)),
+        navigatingProvider.overrideWith((ref) => true),
+      ]);
+      containerListenLive(t);
+      await t.pump();
+      await t.pump(const Duration(seconds: 2));
+      expect(find.textContaining('Abhi ·'), findsOneWidget);
+      expect(find.textContaining('Bapu ·'), findsOneWidget);
+      // Close the kept subscription, then dispose the demo repo (the
+      // test owns the instance) so the pacer timer stops before teardown.
+      closeLiveListen();
+      demo.dispose();
+      await t.pump();
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('first fix re-anchors fallback origin', (t) async {      const fallback =
+          LatLng(defaultMapCenterLat, defaultMapCenterLng);
+      final fix = LatLng(fallback.latitude + 0.0004, fallback.longitude);
+      final fake = FakeRoutingRepository(sampleRoute());
+      await pumpSheet(t, overrides: [
+        routingRepositoryProvider.overrideWithValue(fake),
+        routeOriginProvider.overrideWith((ref) => fallback),
+        routeDestinationProvider.overrideWith(
+            (ref) => const LatLng(18.6645, 73.9512)),
+        navigatingProvider.overrideWith((ref) => true),
+      ]);
+      final container =
+          ProviderScope.containerOf(t.element(find.byType(TripVibeSheet)));
+      container.read(myPositionProvider.notifier).state = fix;
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 100));
+      // Origin follows the real fix (still navigating: no arrival here).
+      expect(container.read(routeOriginProvider), fix);
+      expect(container.read(navigatingProvider), isTrue);
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('simulate drive moves the fix along the route', (t) async {
+      final fake = FakeRoutingRepository(sampleRoute());
+      await pumpSheet(t, overrides: [
+        routingRepositoryProvider.overrideWithValue(fake),
+        routeOriginProvider.overrideWith(
+            (ref) => const LatLng(18.6545, 73.9412)),
+        routeDestinationProvider.overrideWith(
+            (ref) => const LatLng(18.6645, 73.9512)),
+        navigatingProvider.overrideWith((ref) => true),
+        myPositionProvider.overrideWith(
+            (ref) => const LatLng(18.6545, 73.9412)),
+      ]);
+      final container =
+          ProviderScope.containerOf(t.element(find.byType(TripVibeSheet)));
+      await t.tap(find.bySemanticsLabel('Simulate drive'));
+      await t.pump();
+      await t.pump(const Duration(seconds: 3));
+      final moved = container.read(myPositionProvider);
+      expect(moved, isNotNull);
+      expect(
+        const Distance().as(
+            LengthUnit.Meter, const LatLng(18.6545, 73.9412), moved!),
+        greaterThan(5),
+      );
+      await t.tap(find.bySemanticsLabel('Stop simulation'));
+      await t.pump();
+      final frozen = container.read(myPositionProvider);
+      await t.pump(const Duration(seconds: 2));
+      expect(container.read(myPositionProvider), frozen);
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('arrival stops navigation with notice', (t) async {      final dest = const LatLng(18.6645, 73.9512);
       final fake = FakeRoutingRepository(sampleRoute());
       await pumpSheet(t, overrides: [
         routingRepositoryProvider.overrideWithValue(fake),
@@ -348,6 +516,26 @@ void main() {
         expect(find.textContaining('In '), findsOneWidget);
       });
 
+      testWidgets('end button exits navigation', (t) async {
+        await pumpBanner(t, overrides: [
+          routesProvider.overrideWith(
+              (ref) => Future.value([sampleRoute()])),
+          navigatingProvider.overrideWith((ref) => true),
+          mapFollowModeProvider
+              .overrideWith((ref) => FollowMode.me),
+          myPositionProvider.overrideWith(
+              (ref) => const LatLng(18.6581, 73.9451)),
+        ]);
+        expect(find.text('Turn right onto MG Road'), findsOneWidget);
+        await t.tap(find.bySemanticsLabel('End navigation'));
+        await t.pump();
+        final container =
+            ProviderScope.containerOf(t.element(find.byType(NavHeaderBanner)));
+        expect(container.read(navigatingProvider), isFalse);
+        expect(container.read(mapFollowModeProvider), FollowMode.none);
+        expect(find.text('Turn right onto MG Road'), findsNothing);
+      });
+
       testWidgets('hidden when not navigating', (t) async {
         await pumpBanner(t, overrides: [
           routesProvider.overrideWith(
@@ -357,6 +545,76 @@ void main() {
         ]);
         expect(find.text('Turn right onto MG Road'), findsNothing);
         expect(find.textContaining('In '), findsNothing);
+      });
+
+      TripRoute laneRoute() => const TripRoute(
+            points: [
+              LatLng(18.6545, 73.9412),
+              LatLng(18.6580, 73.9450),
+              LatLng(18.6645, 73.9512),
+            ],
+            distanceM: 2300.5,
+            durationS: 320.0,
+            steps: [
+              RouteStep(
+                instruction: 'Head north',
+                maneuverType: 'depart',
+                modifier: '',
+                distanceM: 400,
+                durationS: 60,
+                location: LatLng(18.6545, 73.9412),
+              ),
+              RouteStep(
+                instruction: 'Turn right onto MG Road',
+                maneuverType: 'turn',
+                modifier: 'right',
+                distanceM: 1500,
+                durationS: 200,
+                location: LatLng(18.6580, 73.9450),
+                ref: 'A2;E35',
+                lanes: [
+                  RouteLane(
+                      indications: ['left', 'straight'], valid: true),
+                  RouteLane(indications: ['straight'], valid: true),
+                  RouteLane(indications: ['right'], valid: false),
+                ],
+              ),
+              RouteStep(
+                instruction: 'Arrive at destination',
+                maneuverType: 'arrive',
+                modifier: '',
+                distanceM: 0,
+                durationS: 0,
+                location: LatLng(18.6645, 73.9512),
+              ),
+            ],
+          );
+
+      testWidgets('shows lane strip and shields for current step',
+          (t) async {
+        await pumpBanner(t, overrides: [
+          routesProvider.overrideWith((ref) => Future.value([laneRoute()])),
+          navigatingProvider.overrideWith((ref) => true),
+          myPositionProvider.overrideWith(
+              (ref) => const LatLng(18.6581, 73.9451)),
+        ]);
+        expect(find.bySemanticsLabel('Lane open'), findsNWidgets(2));
+        expect(find.bySemanticsLabel('Lane closed'), findsOneWidget);
+        expect(find.text('A2'), findsOneWidget);
+        expect(find.text('E35'), findsOneWidget);
+      });
+
+      testWidgets('hides lane strip and shields without data', (t) async {
+        await pumpBanner(t, overrides: [
+          routesProvider.overrideWith(
+              (ref) => Future.value([sampleRoute()])),
+          navigatingProvider.overrideWith((ref) => true),
+          myPositionProvider.overrideWith(
+              (ref) => const LatLng(18.6581, 73.9451)),
+        ]);
+        expect(find.bySemanticsLabel('Lane open'), findsNothing);
+        expect(find.bySemanticsLabel('Lane closed'), findsNothing);
+        expect(find.bySemanticsLabel('Road shields'), findsNothing);
       });
     });
   });

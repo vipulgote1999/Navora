@@ -2,10 +2,17 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
 import 'route_models.dart' as tripmodels;
+
+/// Debug-only routing log. Visible via `adb logcat | grep Navora:routing`
+/// in debug builds; compiled out of release builds.
+void _routeLog(String msg) {
+  if (kDebugMode) debugPrint('[Navora:routing] $msg');
+}
 
 class RoutePoint {
   final double lat;
@@ -321,10 +328,17 @@ class RoutingRepository {
       final res = await httpClient
           .get(uri, headers: const {'User-Agent': 'Navora/1.0 (routing)'})
           .timeout(const Duration(seconds: 10));
-      if (res.statusCode != 200) return const [];
-      return tripmodels.parseOsrmRoutes(
-          jsonDecode(res.body));
-    } catch (_) {
+      if (res.statusCode != 200) {
+        _routeLog('fetchRoutes HTTP ${res.statusCode} for $uri');
+        return const [];
+      }
+      final parsed = tripmodels.parseOsrmRoutes(jsonDecode(res.body));
+      _routeLog('fetchRoutes ok: ${parsed.length} route(s) for '
+          '${origin.latitude},${origin.longitude} → '
+          '${destination.latitude},${destination.longitude}');
+      return parsed;
+    } catch (e) {
+      _routeLog('fetchRoutes failed: $e');
       return const [];
     } finally {
       if (owned) httpClient.close();
