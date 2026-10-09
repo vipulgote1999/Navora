@@ -311,3 +311,23 @@ double minDistanceToRouteM(TripRoute route, LatLng pos) {
   }
   return bestM;
 }
+
+/// On-map pill label for a route option: `5 min · 2.3 km via MG Road`.
+///
+/// Pure: same wording as the sheet option cards, shared so map pills and
+/// the sheet never drift. No toll segment — OSRM exposes no toll data.
+String routePillLabel(TripRoute route) {
+  final mins = (route.durationS / 60).round();
+  final km = (route.distanceM / 1000).toStringAsFixed(1);
+  final via = routeViaName(route);
+  return via.isEmpty ? '$mins min · $km km' : '$mins min · $km km $via';
+}
+
+/// Anchor for a route's on-map pill: the middle vertex.
+///
+/// Pure: LatLng(0, 0) when the route has no points (never in practice —
+/// parsed routes require >= 2 points).
+LatLng routeMidpoint(TripRoute route) {
+  if (route.points.isEmpty) return const LatLng(0, 0);
+  return route.points[route.points.length ~/ 2];
+}

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -59,6 +60,68 @@ String memberColor(String uid, {required bool stale}) {
   }
 }
 
+/// Route index from an on-map pill tap action, or -1 when the action is
+/// not a route pill or the index is out of range.
+///
+/// Pure: keeps [_ConvoyMapState._onSymbolTapped] honest without a map.
+int routePillTapIndex(Map<String, String> action, int routeCount) {
+  if (action['kind'] != 'route') return -1;
+  final i = int.tryParse(action['index'] ?? '');
+  if (i == null || i < 0 || i >= routeCount) return -1;
+  return i;
+}
+
+/// Whether the blue my-location dot (+ accuracy halo) shows.
+///
+/// Pure: Google Maps hides the dot while guiding — only the navigation
+/// arrow remains. The dot returns when guidance stops.
+bool showMyLocationDot({required bool navigating}) => !navigating;
+
+/// Navigation arrow size (MapLibre `iconSize`, relative to the 96px
+/// runtime image — ~53px guiding, ~43px on-dot).
+///
+/// Pure: the lone guiding arrow reads bigger than the on-dot triangle.
+double navArrowSize({required bool navigating}) =>
+    navigating ? 0.55 : 0.45;
+
+/// Name of the runtime-generated nav arrow image (see [navArrowPng]).
+const navArrowImageName = 'navora-arrow';
+
+/// Renders a Google-style navigation arrow PNG: Maps-blue triangle with
+/// a white border on transparency, pointing up (rotation applied by the
+/// symbol's `iconRotate`).
+///
+/// Pure pixels (no map I/O): returns PNG bytes, `size`×`size`. The style
+/// sprite's `triangle` is not tintable, so the arrow is baked at runtime
+/// and installed via `addImage` (re-added after every style load).
+Future<Uint8List> navArrowPng({int size = 96}) async {
+  final recorder = ui.PictureRecorder();
+  final canvas = ui.Canvas(recorder);
+  const blue = ui.Color(0xFF4285F4);
+  const white = ui.Color(0xFFFFFFFF);
+  final w = size.toDouble();
+  // Up-pointing triangle with a notched base (Maps chevron feel).
+  final path = ui.Path()
+    ..moveTo(w * 0.5, w * 0.06)
+    ..lineTo(w * 0.90, w * 0.88)
+    ..lineTo(w * 0.5, w * 0.70)
+    ..lineTo(w * 0.10, w * 0.88)
+    ..close();
+  canvas.drawPath(
+    path,
+    ui.Paint()
+      ..color = white
+      ..style = ui.PaintingStyle.stroke
+      ..strokeWidth = w * 0.07
+      ..strokeJoin = ui.StrokeJoin.round,
+  );
+  canvas.drawPath(path, ui.Paint()..color = blue);
+  final image = await recorder.endRecording().toImage(size, size);
+  final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+  image.dispose();
+  return bytes!.buffer.asUint8List();
+}
+
 /// OSM convoy map canvas on MapLibre vector tiles (OpenFreeMap, keyless).
 ///
 /// Same provider contract as before: consumes [mapFollowModeProvider]
@@ -97,6 +160,14 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
   /// Route line handles. Rebuilt only when the route signature changes
   /// ([_linesKey]) — never per frame.
   final List<ml.Line> _altLines = [];
+
+  /// Whether the runtime nav-arrow image is installed in the live style
+  /// (images die with style resets — re-added per style load).
+  bool _arrowImageAdded = false;
+
+  /// Native line id → route index (alternates, casing, and main line all
+  /// map to their route) for tap-to-select via `onLineTapped`.
+  final Map<String, int> _lineRoutes = {};
   String _linesKey = '';
   bool _esriAdded = false;
 
@@ -131,6 +202,7 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
   void _onCreated(ml.MapLibreMapController c) {
     _ml = c;
     c.onSymbolTapped.add(_onSymbolTapped);
+    c.onLineTapped.add(_onLineTapped);
     _styleTimer?.cancel();
     _styleTimer = Timer(const Duration(seconds: 12), () {
       if (!mounted || _styleLoaded) return;
@@ -303,6 +375,7 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
   Future<void> _syncSymbols() async {
     final c = _ml;
     if (c == null || !_styleLoaded) return;
+    await _ensureArrowImage(c);
     final now = DateTime.now();
 
     final tripsAsync = ref.read(watchTripsProvider);
@@ -427,52 +500,60 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
           const {},
         );
       }
-      // Own chevron.
+      // Own chevron. Google Maps: while guiding, the blue dot and the
+      // accuracy halo give way to a lone blue navigation arrow; the dot
+      // returns when guidance stops. Skipped keys are reaped below.
       if (me != null) {
-        keep.add('me-bg');
-        await _upsertCircle(
-          c,
-          'me-bg',
-          ml.CircleOptions(
-            geometry: _mlLatLng(me),
-            circleRadius: 14,
-            circleColor: '#4285F4',
-            circleStrokeWidth: 3,
-            circleStrokeColor: '#FFFFFF',
-          ),
-        );
+        final guiding = ref.read(navigatingProvider);
+        if (showMyLocationDot(navigating: guiding)) {
+          keep.add('me-bg');
+          await _upsertCircle(
+            c,
+            'me-bg',
+            ml.CircleOptions(
+              geometry: _mlLatLng(me),
+              circleRadius: 14,
+              circleColor: '#4285F4',
+              circleStrokeWidth: 3,
+              circleStrokeColor: '#FFFFFF',
+            ),
+          );
+        }
         keep.add('me-arrow');
         await _upsertSymbol(
           c,
           'me-arrow',
           ml.SymbolOptions(
             geometry: _mlLatLng(me),
-            iconImage: 'triangle',
-            iconSize: 1.6,
-            iconColor: '#FFFFFF',
+            iconImage:
+                _arrowImageAdded ? navArrowImageName : 'triangle',
+            iconSize: navArrowSize(navigating: guiding),
             iconRotate: _smooth,
           ),
           const {},
         );
-        // GPS accuracy halo, sized from meters-per-pixel.
-        keep.add('me-acc');
-        final accuracyM = ref.read(myAccuracyMProvider);
-        double radius = 24;
-        try {
-          final mpp = await c.getMetersPerPixelAtLatitude(me.latitude);
-          radius =
-              ((accuracyM ?? 40) / mpp).clamp(8, 60).toDouble();
-        } catch (_) {}
-        await _upsertCircle(
-          c,
-          'me-acc',
-          ml.CircleOptions(
-            geometry: _mlLatLng(me),
-            circleRadius: radius,
-            circleColor: '#4285F4',
-            circleOpacity: 0.25,
-          ),
-        );
+        // GPS accuracy halo, sized from meters-per-pixel. Hidden while
+        // guiding with the dot.
+        if (showMyLocationDot(navigating: guiding)) {
+          keep.add('me-acc');
+          final accuracyM = ref.read(myAccuracyMProvider);
+          double radius = 24;
+          try {
+            final mpp = await c.getMetersPerPixelAtLatitude(me.latitude);
+            radius =
+                ((accuracyM ?? 40) / mpp).clamp(8, 60).toDouble();
+          } catch (_) {}
+          await _upsertCircle(
+            c,
+            'me-acc',
+            ml.CircleOptions(
+              geometry: _mlLatLng(me),
+              circleRadius: radius,
+              circleColor: '#4285F4',
+              circleOpacity: 0.25,
+            ),
+          );
+        }
       }
       // POI pins.
       for (var i = 0; i < pois.length; i++) {
@@ -508,6 +589,37 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
           ),
           const {},
         );
+      }
+      // Route pills: one tappable label per alternate at its midpoint
+      // (Maps-style `5 min · 2.3 km via MG Road`). Hidden while guiding —
+      // the banner owns the header then. No toll segment: OSRM exposes
+      // no toll data.
+      if (!ref.read(navigatingProvider)) {
+        for (var i = 0; i < allRoutes.length; i++) {
+          final r = allRoutes[i];
+          if (r.points.length < 2) continue;
+          final key = 'route-$i';
+          keep.add(key);
+          final isSel =
+              i == selIdx.clamp(0, allRoutes.length - 1);
+          await _upsertSymbol(
+            c,
+            key,
+            ml.SymbolOptions(
+              geometry: _mlLatLng(routeMidpoint(r)),
+              textField: routePillLabel(r),
+              textSize: 13,
+              // Wide enough for `12 min · 5.2 km via Nagar Road` on one
+              // line (Maps-style pills never wrap).
+              textMaxWidth: 22.0,
+              textColor: isSel ? '#FFFFFF' : '#202124',
+              textHaloColor: isSel ? '#4285F4' : '#FFFFFF',
+              textHaloWidth: isSel ? 3.0 : 2.0,
+              textAnchor: 'center',
+            ),
+            {'kind': 'route', 'index': '$i'},
+          );
+        }
       }
       // Drop surplus.
       for (final key in _syms.keys.toList()) {
@@ -553,16 +665,20 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
     try {
       await c.clearLines();
       _altLines.clear();
-      for (final r in routes) {
+      _lineRoutes.clear();
+      for (var i = 0; i < routes.length; i++) {
+        final r = routes[i];
         if (r.points.length < 2 || r == sel) continue;
-        _altLines.add(await c.addLine(
+        final line = await c.addLine(
           ml.LineOptions(
             geometry: [for (final p in r.points) _mlLatLng(p)],
             lineColor: '#9AA0A6',
             lineWidth: 4,
             lineOpacity: 0.8,
           ),
-        ));
+        );
+        _altLines.add(line);
+        _lineRoutes[line.id] = i;
       }
       final List<LatLng>? mainPoints = sel?.points ??
           ((activeRoute?.points.length ?? 0) >= 2
@@ -571,25 +687,46 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
       if (mainPoints != null && mainPoints.length >= 2) {
         final geometry = [for (final p in mainPoints) _mlLatLng(p)];
         // White casing under the blue line (Google Maps look).
-        _altLines.add(await c.addLine(
+        final casing = await c.addLine(
           ml.LineOptions(
             geometry: geometry,
             lineColor: '#FFFFFF',
             lineWidth: 8,
           ),
-        ));
-        _altLines.add(await c.addLine(
+        );
+        _altLines.add(casing);
+        final main = await c.addLine(
           ml.LineOptions(
             geometry: geometry,
             lineColor: '#4285F4',
             lineWidth: 5,
           ),
-        ));
+        );
+        _altLines.add(main);
+        if (routes.isNotEmpty) {
+          final selIdx = selected.clamp(0, routes.length - 1);
+          _lineRoutes[casing.id] = selIdx;
+          _lineRoutes[main.id] = selIdx;
+        }
       }
     } catch (_) {
       // Style torn down mid-sync: mark stale so the next style load
       // rebuilds (handles are reset there).
       _linesKey = '$key-stale';
+    }
+  }
+
+  /// Installs the runtime nav-arrow image once per live style.
+  ///
+  /// Never throws: on failure the chevron falls back to the sprite's
+  /// `triangle` (see `me-arrow` below).
+  Future<void> _ensureArrowImage(ml.MapLibreMapController c) async {
+    if (_arrowImageAdded) return;
+    try {
+      await c.addImage(navArrowImageName, await navArrowPng());
+      _arrowImageAdded = true;
+    } catch (_) {
+      // Offline/teardown: fallback triangle still works.
     }
   }
 
@@ -635,11 +772,28 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
           _resolveActive(trips, ref.read(selectedTripIdProvider));
       ref.read(selectedTripIdProvider.notifier).state =
           active?.id ?? 'mock-trip';
+    } else if (action['kind'] == 'route') {
+      // On-map pill tap selects the alternate (Maps-style).
+      final routes = ref.read(routesProvider).value ?? const <TripRoute>[];
+      final idx = routePillTapIndex(action, routes.length);
+      if (idx >= 0) {
+        ref.read(selectedRouteIndexProvider.notifier).state = idx;
+      }
     } else if (action['kind'] == 'poi' && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${action['name']} · ${action['label']}')),
       );
     }
+  }
+
+  /// Tap-to-select for route lines: tapping an alternate (or the selected
+  /// line) picks that route, same as tapping its pill.
+  void _onLineTapped(ml.Line line) {
+    final idx = _lineRoutes[line.id];
+    if (idx == null) return;
+    final routes = ref.read(routesProvider).value ?? const <TripRoute>[];
+    if (idx < 0 || idx >= routes.length) return;
+    ref.read(selectedRouteIndexProvider.notifier).state = idx;
   }
 
   Trip? _resolveActive(List<Trip> trips, String? selectedId) {
@@ -731,7 +885,9 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
       _circles.clear();
       _tapActions.clear();
       _altLines.clear();
+      _lineRoutes.clear();
       _linesKey = '';
+      _arrowImageAdded = false;
       _esriAdded = false;
       setState(() {
         _styleLoaded = false;
@@ -747,6 +903,11 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
     // never appear, no matter how much live data flows.
     ref.watch(nearbyPoisProvider);
     ref.watch(myHeadingDegProvider);
+    // Route pills + lines must appear as soon as alternates load or the
+    // selection changes, even with no GPS movement driving a sync.
+    ref.watch(routesProvider);
+    ref.watch(selectedRouteIndexProvider);
+    ref.watch(navigatingProvider);
     final liveSel = ref.watch(selectedTripIdProvider);
     if (liveSel != null) ref.watch(livePositionsProvider(liveSel));
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncSymbols());
@@ -759,7 +920,10 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
               target: _mlLatLng(convoyMapCenter),
               zoom: defaultMapZoom,
             ),
-            myLocationEnabled: true,
+            // Our symbols draw location in every state (dot + chevron
+            // exploring, lone blue arrow guiding) — the native puck would
+            // double-draw a second blue dot on top of them.
+            myLocationEnabled: false,
             compassEnabled: false,
             // Symbols (rider initials + names) above circles + fills —
             // default order buries text under circle pins.

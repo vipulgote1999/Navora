@@ -30,4 +30,41 @@ void main() {
       expect(c, startsWith('#'));
     });
   });
+
+  group('my-location dot vs nav arrow', () {
+    test('dot and halo show only when not guiding', () {
+      expect(showMyLocationDot(navigating: false), isTrue);
+      expect(showMyLocationDot(navigating: true), isFalse);
+    });
+
+    test('arrow is bigger while guiding', () {
+      expect(
+        navArrowSize(navigating: true),
+        greaterThan(navArrowSize(navigating: false)),
+      );
+    });
+
+    test('navArrowPng renders a valid PNG', () async {
+      final bytes = await navArrowPng();
+      expect(bytes.lengthInBytes, greaterThan(100));
+      // PNG magic.
+      expect(bytes.sublist(0, 4), [0x89, 0x50, 0x4E, 0x47]);
+    });
+  });
+  group('route pill tap actions', () {
+    test('route kind with valid index selects it', () {
+      expect(
+        routePillTapIndex({'kind': 'route', 'index': '1'}, 3),
+        1,
+      );
+    });
+
+    test('non-route, bad index, or out of range yields -1', () {
+      expect(routePillTapIndex({'kind': 'trip'}, 3), -1);
+      expect(routePillTapIndex({'kind': 'route', 'index': 'x'}, 3), -1);
+      expect(routePillTapIndex({'kind': 'route', 'index': '5'}, 3), -1);
+      expect(routePillTapIndex({'kind': 'route'}, 3), -1);
+      expect(routePillTapIndex({'kind': 'route', 'index': '0'}, 0), -1);
+    });
+  });
 }

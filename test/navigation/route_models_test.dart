@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:navora/features/navigation/route_models.dart';
 
 Map<String, dynamic> _osrmFixture() => {
@@ -109,6 +110,54 @@ void main() {
       final last = routes.first.steps[2];
       expect(last.ref, '');
       expect(last.lanes, isEmpty);
+    });
+  });
+
+  group('on-map route pills', () {
+    test('routePillLabel shows mins + km + via', () {
+      final route = parseOsrmRoutes(_osrmFixture()).first;
+      expect(routePillLabel(route), '5 min · 2.3 km via MG Road');
+    });
+
+    test('routeMidpoint returns middle vertex', () {
+      final route = parseOsrmRoutes(_osrmFixture()).first;
+      expect(routeMidpoint(route), const LatLng(18.6580, 73.9450));
+    });
+  });
+
+  group('arrival detection', () {
+    const dest = LatLng(18.6645, 73.9512);
+    const end = LatLng(18.6640, 73.9500);
+
+    test('true at the destination pin', () {
+      expect(hasArrived(me: dest, destination: dest), isTrue);
+    });
+
+    test('true at the route end even when the pin is off-road', () {
+      // Snapped routes often end >25m from the destination pin.
+      expect(
+        hasArrived(
+          me: end,
+          destination: const LatLng(18.6700, 73.9600),
+          routeEnd: end,
+        ),
+        isTrue,
+      );
+    });
+
+    test('false when far from both and without any target', () {
+      expect(
+        hasArrived(
+          me: const LatLng(18.6545, 73.9412),
+          destination: dest,
+          routeEnd: end,
+        ),
+        isFalse,
+      );
+      expect(
+        hasArrived(me: const LatLng(18.6545, 73.9412)),
+        isFalse,
+      );
     });
   });
 }
