@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
@@ -12,6 +13,8 @@ import 'package:navora/features/home/tracking/location_permission.dart';
 import 'package:navora/features/navigation/drive_camera.dart';
 import 'package:navora/features/navigation/route_models.dart';
 import 'package:navora/features/navigation/route_providers.dart';
+import 'package:navora/features/trips/data/demo_bhosari_route.dart';
+import 'package:navora/features/trips/data/demo_convoy_repository.dart';
 import 'package:navora/features/trips/providers/trip_providers.dart';
 import 'package:navora/shared/models/live_position.dart';
 import 'package:navora/shared/models/member.dart';
@@ -80,6 +83,9 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
   final List<ml.Line> _altLines = [];
   String _linesKey = '';
   bool _esriAdded = false;
+
+  /// Last logged sync signature (change-only evidence logging).
+  String _lastSyncSig = '';
 
   /// Smoothed camera heading + last sent target (throttle state).
   double _smooth = 0;
@@ -286,10 +292,16 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
 
     final tripsAsync = ref.read(watchTripsProvider);
     final trips = tripsAsync.value ?? const <Trip>[];
-    final active = _resolveActive(trips, ref.read(selectedTripIdProvider));
-    final activeId = active?.id ?? 'mock-trip';
-    final members =
-        active == null ? const <Member>[] : ref.read(tripMembersProvider(active.id));
+    final selected = ref.read(selectedTripIdProvider);
+    // Demo convoy has no Trip object in the mock list — resolve its
+    // members directly so pacer pins always exist while demoing.
+    final bool inDemo = selected == demoTripId;
+    final active =
+        inDemo ? null : _resolveActive(trips, selected);
+    final activeId = active?.id ?? selected ?? 'mock-trip';
+    final members = active == null && !inDemo
+        ? const <Member>[]
+        : ref.read(tripMembersProvider(activeId));
     final liveAsync = ref.read(livePositionsProvider(activeId));
     final live = liveAsync.value ?? const <LivePosition>[];
     final byUid = <String, LivePosition>{for (final p in live) p.uid: p};
@@ -297,6 +309,23 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
     final me = ref.read(myPositionProvider);
     final pois = ref.read(nearbyPoisProvider);
     final searchFocus = ref.read(searchFocusProvider);
+    // Destination pin: the searched/dest point while demoing, else the
+    // static trip area (convoyMapCenter was wrong for Bhosari demos).
+    final destAt = inDemo
+        ? (searchFocus != null
+            ? LatLng(searchFocus.lat, searchFocus.lng)
+            : demoBhosariDestination)
+        : convoyMapCenter;
+
+    // Evidence log (Navora:map): member/live counts only on change.
+    final sig =
+        '${members.length}:${byUid.length}:${me != null}:${pois.length}:${searchFocus != null}';
+    if (sig != _lastSyncSig && kDebugMode) {
+      debugPrint('[Navora:map] sync members=${members.length} '
+          'live=${byUid.length} me=${me != null} pois=${pois.length} '
+          'focus=${searchFocus != null} demo=$inDemo');
+      _lastSyncSig = sig;
+    }
 
     final keep = <String>{};
     try {
@@ -306,25 +335,33 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
         c,
         'dest',
         ml.SymbolOptions(
-          geometry: _mlLatLng(convoyMapCenter),
+          geometry: _mlLatLng(destAt),
           iconImage: 'marker',
           iconSize: 1.4,
           iconColor: '#E53935',
         ),
         {'kind': 'trip'},
       );
-      // Member pins.
+      // Member pins at live GPS when available (demo pacers ride the
+      // route), else the static mock offset. Own uid is skipped — the
+      // chevron already marks it.
       for (var i = 0; i < members.length; i++) {
         final m = members[i];
+        if (m.uid == 'me') continue;
         final key = 'm-${m.uid}';
         keep.add(key);
-        final stale = byUid[m.uid]?.isStale(now) ?? false;
+        final livePos = byUid[m.uid];
+        final pinAt = livePos != null
+            ? LatLng(livePos.lat, livePos.lng)
+            : memberOffset(m.uid, i);
+        final stale = livePos?.isStale(now) ?? false;
         final color = stale ? Colors.grey : primary;
+        final name = m.displayName.isNotEmpty ? m.displayName : m.uid;
         await _upsertCircle(
           c,
           key,
           ml.CircleOptions(
-            geometry: _mlLatLng(memberOffset(m.uid, i)),
+            geometry: _mlLatLng(pinAt),
             circleRadius: 10,
             circleColor: _hex(color),
             circleStrokeWidth: 2,
@@ -336,8 +373,8 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
           c,
           '$key-label',
           ml.SymbolOptions(
-            geometry: _mlLatLng(memberOffset(m.uid, i)),
-            textField: m.uid.isEmpty ? '?' : m.uid[0].toUpperCase(),
+            geometry: _mlLatLng(pinAt),
+            textField: name.isEmpty ? '?' : name[0].toUpperCase(),
             textSize: 12,
             textColor: '#FFFFFF',
           ),

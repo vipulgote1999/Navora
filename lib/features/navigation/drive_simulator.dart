@@ -1,11 +1,17 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navora/features/home/providers/map_ui_providers.dart';
 import 'package:navora/features/navigation/drive_camera.dart';
 import 'package:navora/features/navigation/route_models.dart';
 import 'package:navora/features/navigation/route_providers.dart';
+
+/// Debug-only drive log. `adb logcat | grep Navora:drive`.
+void _simLog(String msg) {
+  if (kDebugMode) debugPrint('[Navora:drive] $msg');
+}
 
 /// On-device mock drive: synthetic GPS fixes along the loaded route.
 ///
@@ -27,14 +33,24 @@ class DriveSimulator {
       Duration tick = const Duration(milliseconds: 800)}) {
     stop();
     final points = route.points;
-    if (points.length < 2) return;
+    if (points.length < 2) {
+      _simLog('start ignored: only ${points.length} point(s)');
+      return;
+    }
+    // Guarantee visible effect: without follow-me the camera and chevron
+    // never ride the synthetic fixes (the classic "dead play button").
+    ref.read(mapFollowModeProvider.notifier).state = FollowMode.me;
     final cum = _cumulative(points);
     final total = cum.last;
+    _simLog('start: ${points.length} pts, ${total.toStringAsFixed(0)}m, '
+        '${speedMps}m/s, follow=me');
     var traveled = 0.0;
     final stepM = speedMps * tick.inMilliseconds / 1000.0;
+    var loggedTicks = 0;
     _timer = Timer.periodic(tick, (_) {
       try {
         if (!ref.read(navigatingProvider)) {
+          _simLog('stop: navigation ended at ${traveled.toStringAsFixed(0)}m');
           ref.read(simulatingProvider.notifier).state = false;
           stop();
           return;
@@ -52,14 +68,28 @@ class DriveSimulator {
         ref.read(mySpeedMpsProvider.notifier).state = speedMps;
         ref.read(myAccuracyMProvider.notifier).state = 8;
         ref.read(simulatingProvider.notifier).state = true;
-        if (traveled >= total) stop();
-      } catch (_) {
+        loggedTicks++;
+        // Per-tick evidence (also proves the timer is alive on device).
+        if (loggedTicks <= 3 || loggedTicks % 10 == 0) {
+          _simLog('tick $loggedTicks: ${traveled.toStringAsFixed(0)}/'
+              '${total.toStringAsFixed(0)}m @ '
+              '${fix.latitude.toStringAsFixed(5)},'
+              '${fix.longitude.toStringAsFixed(5)}');
+        }
+        if (traveled >= total) {
+          _simLog('stop: destination reached');
+          stop();
+        }
+      } catch (e) {
+        _simLog('stop: tick error $e');
         stop();
       }
     });
   }
 
   void stop() {
+    if (_timer == null) return;
+    _simLog('stop called');
     _timer?.cancel();
     _timer = null;
   }
