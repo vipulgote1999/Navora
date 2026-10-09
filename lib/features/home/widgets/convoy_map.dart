@@ -696,8 +696,13 @@ class _ConvoyMapState extends ConsumerState<ConvoyMap> {
 
     final native = ref.watch(mapNativeProvider);
     // Keep symbols fresh on provider changes that listeners miss.
+    // The live-positions watch below is the refresh driver for pacer
+    // pins: without it _syncSymbols runs once (live=0) and demo riders
+    // never appear, no matter how much live data flows.
     ref.watch(nearbyPoisProvider);
     ref.watch(myHeadingDegProvider);
+    final liveSel = ref.watch(selectedTripIdProvider);
+    if (liveSel != null) ref.watch(livePositionsProvider(liveSel));
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncSymbols());
 
     final map = native
