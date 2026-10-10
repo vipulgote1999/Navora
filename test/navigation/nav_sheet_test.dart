@@ -385,7 +385,14 @@ void main() {
       await t.tap(find.text('End navigation'));
       await t.pump();
       await t.pump(const Duration(milliseconds: 100));
+      // Full exit: guidance off, endpoints cleared (no leftover lines).
       expect(container.read(navigatingProvider), isFalse);
+      expect(container.read(routeOriginProvider), isNull);
+      expect(container.read(routeDestinationProvider), isNull);
+      expect(
+        container.read(routeNoticeProvider),
+        'Arrived at destination ✓',
+      );
       expect(find.text('Arrived at destination ✓'), findsOneWidget);
     });
 

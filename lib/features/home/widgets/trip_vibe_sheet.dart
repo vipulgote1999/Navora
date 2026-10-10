@@ -477,6 +477,7 @@ class _RouteSection extends ConsumerWidget {
             dest,
             ref.read(searchFocusProvider),
           );
+          final messenger = ScaffoldMessenger.of(context);
           unawaited(showDialog<void>(
             context: context,
             barrierDismissible: false,
@@ -491,10 +492,18 @@ class _RouteSection extends ConsumerWidget {
                 ),
                 FilledButton(
                   onPressed: () {
-                    ref.read(navigatingProvider.notifier).state = false;
                     ref.read(routeNoticeProvider.notifier).state =
                         'Arrived at destination ✓';
+                    // Full exit: lines, pills, sim, and demo residue all go
+                    // (ending at arrival means the trip is over — keeping
+                    // the preview lines was reported as a bug).
+                    exitNavigation(ref);
                     Navigator.of(dialogContext).pop();
+                    messenger.showSnackBar(
+                      const SnackBar(
+                        content: Text('Arrived at destination ✓'),
+                      ),
+                    );
                   },
                   child: const Text('End navigation'),
                 ),

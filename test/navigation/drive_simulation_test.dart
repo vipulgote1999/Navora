@@ -123,12 +123,13 @@ void main() {
     await DriveSim.driveAlong(t, container, [_c]);
     expect(find.text("You've arrived"), findsOneWidget);
     expect(container.read(navigatingProvider), isTrue);
-    // Confirming ends guidance with a notice.
+    // Confirming exits fully: no guidance, no leftover route lines.
     await t.tap(find.text('End navigation'));
     await t.pump();
     await t.pump(const Duration(milliseconds: 100));
     expect(container.read(navigatingProvider), isFalse);
-    expect(find.text('Arrived at destination ✓'), findsOneWidget);
+    expect(container.read(routeOriginProvider), isNull);
+    expect(container.read(routeDestinationProvider), isNull);
     expect(t.takeException(), isNull);
   });
 

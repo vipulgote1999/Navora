@@ -78,11 +78,11 @@ int routePillTapIndex(Map<String, String> action, int routeCount) {
 bool showMyLocationDot({required bool navigating}) => !navigating;
 
 /// Navigation arrow size (MapLibre `iconSize`, relative to the 96px
-/// runtime image — ~53px guiding, ~43px on-dot).
+/// runtime image — ~82px guiding, ~48px on-dot).
 ///
 /// Pure: the lone guiding arrow reads bigger than the on-dot triangle.
 double navArrowSize({required bool navigating}) =>
-    navigating ? 0.55 : 0.45;
+    navigating ? 0.85 : 0.5;
 
 /// Name of the runtime-generated nav arrow image (see [navArrowPng]).
 const navArrowImageName = 'navora-arrow';
