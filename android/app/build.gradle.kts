@@ -43,3 +43,10 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Android for Cars — Car App Library (projection / Android Auto).
+    // Stable 1.7.0 (verified against dl.google.com maven-metadata; 1.8.x is RC, 1.9.x is alpha).
+    implementation("androidx.car.app:app:1.7.0")
+    testImplementation("junit:junit:4.13.2")
+}

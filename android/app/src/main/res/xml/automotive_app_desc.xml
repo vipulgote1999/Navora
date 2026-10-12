@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android Auto descriptor. Declares Navora as a navigation app to the car host.
+  Start with navigation only; add search/poi only if those templates are implemented.
+-->
+<automotiveApp>
+    <uses name="navigation" />
+</automotiveApp>
